@@ -116,12 +116,13 @@ def test_registry_extras_exist_in_pyproject():
 # ── 5. sensevoice-onnx: torch-free + gated by the ONNX artifact ──────────────
 
 
-def test_sensevoice_onnx_is_torch_free_and_recommended():
+def test_sensevoice_onnx_is_torch_free():
     optional = _project_optional_deps()
     # engine_type is its own type (sensevoice-onnx) — no torch path.
     assert engine_type_for_engine("sensevoice-onnx") == "sensevoice-onnx"
-    # registry tier is recommended (the CPU default).
-    assert ENGINE_REGISTRY["sensevoice-onnx"].tier == "recommended"
+    # registry tier is normal: Whisper (faster-whisper) is the product default,
+    # SenseVoice-ONNX stays as a selectable torch-free option.
+    assert ENGINE_REGISTRY["sensevoice-onnx"].tier == "normal"
     # base deps must never contain torch.
     base = _project().get("project", {}).get("dependencies", [])
     assert not any(dep.startswith("torch") for dep in base), "torch leaked into base deps"

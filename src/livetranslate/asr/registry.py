@@ -46,7 +46,7 @@ ENGINE_REGISTRY: dict[str, EngineSpec] = {
     "faster-whisper": EngineSpec(
         id="faster-whisper",
         display_name="Whisper (faster-whisper)",
-        tier="normal",
+        tier="recommended",
         engine_type="whisper",
         extras=("engine-whisper",),
         platforms=("win32",),
@@ -64,7 +64,7 @@ ENGINE_REGISTRY: dict[str, EngineSpec] = {
     "sensevoice-onnx": EngineSpec(
         id="sensevoice-onnx",
         display_name="SenseVoice (ONNX)",
-        tier="recommended",
+        tier="normal",
         engine_type="sensevoice-onnx",
         extras=("engine-sensevoice-onnx",),
         platforms=("win32",),
@@ -102,14 +102,20 @@ GUI_ENGINE_ORDER: tuple[str, ...] = (
 )
 
 
-def recommend_engine(accel: AcceleratorInfo) -> str:
-    """First-run default (Windows-only): CUDA → faster-whisper, else sensevoice-onnx.
+def recommend_engine(_accel: AcceleratorInfo) -> str:
+    """First-run default (Windows-only): faster-whisper.
+
+    Whisper (faster-whisper) is the product default: it runs on both CPU and
+    CUDA (ctranslate2), has a straightforward hub download path and is the engine
+    users reach for. SenseVoice-ONNX stays selectable as a normal option for the
+    lighter torch-free path. ``_accel`` is reserved for future per-hardware
+    tuning (e.g. a larger model on GPU) and is intentionally unused for now.
 
     Returns a registry id. Callers resolve ``ENGINE_REGISTRY[id].engine_type`` to
     obtain the worker ``engine_type`` (settings['asr_engine'] /
     worker_config['engine_type']).
     """
-    return "faster-whisper" if accel.kind == "cuda" else "sensevoice-onnx"
+    return "faster-whisper"
 
 
 def engines_for_platform(platform: str) -> list[str]:

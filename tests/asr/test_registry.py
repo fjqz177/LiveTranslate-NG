@@ -120,4 +120,4 @@ class TestRecommend:
         assert recommend_engine(AcceleratorInfo("cuda", "RTX 4090")) == "faster-whisper"
 
     def test_windows_cpu(self):
-        assert recommend_engine(AcceleratorInfo("cpu")) == "sensevoice-onnx"
+        assert recommend_engine(AcceleratorInfo("cpu")) == "faster-whisper"
