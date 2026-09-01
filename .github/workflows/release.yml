@@ -1,86 +1,288 @@
-name: Release
+name: Windows Release
+run-name: Windows release · ${{ github.ref_name }}
 
-# Plan §5.3: tag push (v*) or manual dispatch builds the single Windows
-# installer, smokes the frozen onedir (offscreen --smoke) and publishes the
-# installer to a GitHub Release. Windows-only; the whole build runs through
-# scripts/package_windows.ps1 (no bash re-implementation).
-#
-# The self-hosted Ed25519 update manifest (latest.json + signature) is gone:
-# the app asks the GitHub releases API for a new version and points the user
-# at this Release's download page, so publishing the setup.exe + sha256 here
-# is the whole contract.
+# Plan §4.8 / §8 P5: tag push (v*) builds the FULL pyappify distribution for
+# both profiles (default=CPU, gpu), smokes the frozen app offscreen, signs the
+# setup.exe via SignPath (when SIGN_BUILD=true) and publishes to a GitHub
+# Release. Windows-only. The old pyinstaller/Inno flow (package_windows.ps1) is
+# retired — this is the single packaging entrypoint.
 
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
 
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
+env:
+  PYTHON_VERSION: "3.12"
+  PYTHONIOENCODING: "UTF-8"
+  PYTHONLEGACYWINDOWSSTDIO: "UTF-8"
+  # Set to 'true' only once the SignPath project exists + the SIGNPATH_* secrets
+  # are configured (plan §7.8: first SignPath run needs a manual project +
+  # approval). Default 'false' so a tag push builds an unsigned setup.exe first.
+  SIGN_BUILD: "false"
+  # GitHub-hosted runners are outside mainland China: override the Tsinghua/NJU
+  # mirrors with the official indexes for sync/export there. Local dev keeps the
+  # mirrors (pyproject), so the committed requirements pins stay identical.
+  LT_REQUIREMENTS_PYPI_INDEX: "https://pypi.org/simple"
+  LT_REQUIREMENTS_PYTORCH_INDEX: "https://download.pytorch.org/whl/cu126"
+
 jobs:
-  build:
+  validate:
+    name: 1 · Validate
     runs-on: windows-latest
     env:
-      VERSION: ${{ github.ref_name }}
+      # Clear secrets before the quality gate so tests can't rely on them
+      # (plan §4.8: "清空 secrets 环境变量再跑").
+      GITHUB_TOKEN: ""
+      GH_TOKEN: ""
+      SIGNPATH_API_TOKEN: ""
+      MIRRORCHYAN_TOKEN: ""
+      ACTIONS_RUNTIME_TOKEN: ""
+      ACTIONS_ID_TOKEN_REQUEST_TOKEN: ""
     steps:
-      - uses: actions/checkout@v4
-
-      # Normalize VERSION (REL-1): tag pushes must carry a semver v-tag
-      # (fail fast otherwise); manual dispatches derive it from pyproject.
-      - name: Resolve version
-        shell: bash
+      - name: Configure runner
+        shell: pwsh
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-              echo "::error::release tag '$VERSION' is not a semver v-tag"
-              exit 1
-            fi
-          else
-            VERSION="v$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)"
-            [ -n "$VERSION" ] || { echo "::error::could not read version from pyproject.toml"; exit 1; }
-            echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          fi
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
-      # Single packaging entrypoint: sync → onedir → Inno setup.exe →
-      # frozen --smoke → sha256. This is the same script a developer runs
-      # locally, so local and CI cannot diverge.
-      - name: Package (single entrypoint)
-        shell: bash
-        run: pwsh -NoProfile -File scripts/package_windows.ps1 -Version "${VERSION#v}"
+      # Dev/test environment with CPU torch (cheap) — the full engine set is
+      # installed by pyappify on the END-USER machine, not here.
+      - name: Sync environment (CPU torch)
+        run: uv sync --locked --default-index https://pypi.org/simple --index "pytorch=https://download.pytorch.org/whl/cpu" --index-strategy unsafe-best-match
 
-      # Emit a traceable record for the G7 release checklist: the smoke result
-      # and the artifact sha256. ps1 already fails the job if frozen --smoke
-      # is not "Smoke OK" (non-zero exit), so reaching here means the frozen
-      # onedir actually boots.
-      - name: Record smoke + artifact hash
-        shell: bash
+      # Authoritative quality gate (same command a human runs locally).
+      - name: Quality gate
+        run: uv run livetranslate-pr
+
+      # Frozen-app smoke: offscreen boot, exit 0, "Smoke OK" (CI gate).
+      - name: Smoke gate
+        shell: pwsh
+        env:
+          LIVETRANSLATE_PORTABLE_DIR: ${{ runner.temp }}\lt-smoke-data
         run: |
-          echo "## Windows install artifact" >> "$GITHUB_STEP_SUMMARY"
-          echo "- smoke: Smoke OK (frozen onedir booted)" >> "$GITHUB_STEP_SUMMARY"
-          for f in dist/LiveTranslate-*-setup.exe.sha256; do
-            echo "- $f: \`$(cat "$f")\`" >> "$GITHUB_STEP_SUMMARY"
-          done
+          $out = uv run livetranslate --smoke 2>&1 | Out-String
+          Write-Host $out
+          if ($LASTEXITCODE -ne 0 -or $out -notmatch "Smoke OK") { throw "Smoke gate failed" }
 
-      - uses: actions/upload-artifact@v4
+  package:
+    name: 2 · Build & sign
+    needs: validate
+    runs-on: windows-latest
+    outputs:
+      per_exe_slug: ${{ steps.meta.outputs.per_exe_slug }}
+    steps:
+      - name: Configure runner
+        shell: pwsh
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - uses: actions/checkout@v4
         with:
-          name: dist-win32
-          path: |
-            dist/LiveTranslate-*-setup.exe
-            dist/LiveTranslate-*-setup.exe.sha256
+          fetch-depth: 0
+          persist-credentials: false
 
-      # Publish the installer to this GitHub Release — the app's update check
-      # (GitHub releases API) surfaces it to the user. No manifest, no signing.
-      - name: Publish GitHub Release
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Sync environment (CPU torch)
+        run: uv sync --locked --default-index https://pypi.org/simple --index "pytorch=https://download.pytorch.org/whl/cpu" --index-strategy unsafe-best-match
+
+      # Drift gate: regenerate the pinned install requirements with the official
+      # indexes and diff the committed ones. Mirrors are mirrors of the same
+      # wheels, so the pins must match byte-for-byte; a diff means the committed
+      # requirements drifted from pyproject (plan §4.7).
+      - name: Drift gate (requirements-full-*.txt == pyproject extras)
+        shell: pwsh
+        run: |
+          uv export --no-dev --no-emit-project --default-index $env:LT_REQUIREMENTS_PYPI_INDEX --index "pytorch=$env:LT_REQUIREMENTS_PYTORCH_INDEX" --extra engine-funasr --extra engine-whisper | Out-File -Encoding utf8 $env:RUNNER_TEMP\cpu.txt
+          uv export --no-dev --no-emit-project --default-index $env:LT_REQUIREMENTS_PYPI_INDEX --index "pytorch=$env:LT_REQUIREMENTS_PYTORCH_INDEX" --extra engine-funasr --extra engine-whisper --extra engine-cuda | Out-File -Encoding utf8 $env:RUNNER_TEMP\gpu.txt
+          foreach ($pair in @(@("cpu","requirements-full-cpu.txt"),@("gpu","requirements-full-gpu.txt"))) {
+            $gen = "$env:RUNNER_TEMP\$($pair[0]).txt"
+            if (-not (Compare-Object (Get-Content $gen) (Get-Content $pair[1]) -SyncWindow 0)) {}
+            else { throw "requirements would drift: $($pair[1]) no longer matches pyproject (re-run scripts/build_full_requirements.py locally and commit)" }
+          }
+          Write-Host "Drift gate OK: requirements-full-{cpu,gpu}.txt match pyproject"
+
+      # Portable executable (staged only when signing, so it can be signed
+      # BEFORE it is baked into the installer).
+      - name: Build portable executable
+        id: build_executable
+        uses: ok-oldking/pyappify-action@master
+        if: env.SIGN_BUILD == 'true'
+        with:
+          build_exe_only: true
+
+      - name: Upload portable executable for signing
+        id: upload_executable
+        uses: actions/upload-artifact@v4
+        if: env.SIGN_BUILD == 'true'
+        with:
+          name: portable-executable-to-sign
+          path: ${{ steps.build_executable.outputs.exe-path }}
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign portable executable
+        id: sign_executable
+        uses: signpath/github-action-submit-signing-request@v2.2
+        if: env.SIGN_BUILD == 'true'
+        with:
+          api-token: "${{ secrets.SIGNPATH_API_TOKEN }}"
+          organization-id: "${{ secrets.SIGNPATH_ORGANIZATION_ID }}"
+          project-slug: "livetranslate"
+          signing-policy-slug: "release-signing"
+          artifact-configuration-slug: "single-exe"
+          github-artifact-id: "${{ steps.upload_executable.outputs.artifact-id }}"
+          wait-for-completion: false
+
+      - name: Approve portable executable signing
+        uses: fjogeleit/http-request-action@v1
+        if: env.SIGN_BUILD == 'true'
+        with:
+          url: "https://app.signpath.io/API/v1/${{ secrets.SIGNPATH_ORGANIZATION_ID }}/SigningRequests/${{ steps.sign_executable.outputs.signing-request-id }}/Approve"
+          method: POST
+          bearerToken: "${{ secrets.SIGNPATH_API_TOKEN }}"
+          contentType: application/json
+          data: "{}"
+          preventFailureOnNoResponse: true
+          retry: 60
+          retryWait: 10000
+
+      - name: Download signed portable executable
+        if: env.SIGN_BUILD == 'true'
+        shell: pwsh
+        env:
+          SIGNING_REQUEST_ID: ${{ steps.sign_executable.outputs.signing-request-id }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          OUTPUT_DIRECTORY: ${{ steps.build_executable.outputs.exe-folder }}
+        run: |
+          $baseUrl = "https://app.signpath.io/API/v1/${{ secrets.SIGNPATH_ORGANIZATION_ID }}/SigningRequests/$env:SIGNING_REQUEST_ID"
+          $headers = @{ Authorization = "Bearer $env:SIGNPATH_API_TOKEN" }
+          $deadline = (Get-Date).AddSeconds(60000)
+          do {
+            $status = Invoke-RestMethod -Uri "$baseUrl/Status" -Headers $headers
+            Write-Host "SignPath status: $($status.status) ($($status.workflowStatus))"
+            if ($status.status -eq 'Completed') { break }
+            if ($status.isFinalStatus) { throw "SignPath ended '$($status.status)'" }
+            if ((Get-Date) -ge $deadline) { throw 'Timed out waiting for SignPath' }
+            Start-Sleep -Seconds 10
+          } while ($true)
+          $archivePath = Join-Path $env:RUNNER_TEMP 'signed-portable.zip'
+          $out = [System.IO.Path]::GetFullPath($env:OUTPUT_DIRECTORY)
+          New-Item -ItemType Directory -Path $out -Force | Out-Null
+          Invoke-WebRequest -Uri "$baseUrl/SignedArtifact" -Headers $headers -OutFile $archivePath
+          Expand-Archive -LiteralPath $archivePath -DestinationPath $out -Force
+
+      # Build both installers (default + gpu). When signing, the exe was signed
+      # above so it is baked signed into both; when not signing this is the only
+      # build step.
+      - name: Build installers
+        id: build_installers
+        uses: ok-oldking/pyappify-action@master
+        with:
+          build_exe_only: false
+
+      # ── Sign each setup.exe (only when SIGN_BUILD). Two profiles → two
+      # installers, each signed separately. ──────────────────────────────
+      - name: Upload default installer for signing
+        id: upload_default
+        uses: actions/upload-artifact@v4
+        if: env.SIGN_BUILD == 'true'
+        with:
+          name: default-installer-to-sign
+          path: pyappify_dist/LiveTranslate-win32-default-setup.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign default installer
+        id: sign_default
+        uses: signpath/github-action-submit-signing-request@v2.2
+        if: env.SIGN_BUILD == 'true'
+        with:
+          api-token: "${{ secrets.SIGNPATH_API_TOKEN }}"
+          organization-id: "${{ secrets.SIGNPATH_ORGANIZATION_ID }}"
+          project-slug: "livetranslate"
+          signing-policy-slug: "release-signing"
+          artifact-configuration-slug: "setupexe"
+          github-artifact-id: "${{ steps.upload_default.outputs.artifact-id }}"
+          wait-for-completion: false
+
+      - name: Download signed default installer
+        if: env.SIGN_BUILD == 'true'
+        shell: pwsh
+        env:
+          SIGNING_REQUEST_ID: ${{ steps.sign_default.outputs.signing-request-id }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+        run: |
+          $baseUrl = "https://app.signpath.io/API/v1/${{ secrets.SIGNPATH_ORGANIZATION_ID }}/SigningRequests/$env:SIGNING_REQUEST_ID"
+          $headers = @{ Authorization = "Bearer $env:SIGNPATH_API_TOKEN" }
+          $out = [System.IO.Path]::GetFullPath('pyappify_dist')
+          New-Item -ItemType Directory -Path $out -Force | Out-Null
+          do {
+            $status = Invoke-RestMethod -Uri "$baseUrl/Status" -Headers $headers
+            Write-Host "SignPath status: $($status.status) ($($status.workflowStatus))"
+            if ($status.status -eq 'Completed') { break }
+            if ($status.isFinalStatus) { throw "SignPath ended '$($status.status)'" }
+            Start-Sleep -Seconds 10
+          } while ((Get-Date) -lt (Get-Date).AddSeconds(60000))
+          $z = Join-Path $env:RUNNER_TEMP 'signed-default.zip'
+          Invoke-WebRequest -Uri "$baseUrl/SignedArtifact" -Headers $headers -OutFile $z
+          Expand-Archive -LiteralPath $z -DestinationPath $out -Force
+
+      - name: Stage release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: pyappify_dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: 3 · Publish
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: pyappify_dist
+
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ env.VERSION }}
-          fail_on_unmatched_files: false
-          files: |
-            dist/LiveTranslate-*-setup.exe
-            dist/LiveTranslate-*-setup.exe.sha256
+          body: |
+            ### LiveTranslate ${{ github.ref_name }}
+
+            Windows 安装包（双变体）：
+            * `LiveTranslate-win32-default-setup.exe` — CPU 版（默认，装满全部引擎依赖）
+            * `LiveTranslate-win32-gpu-setup.exe` — GPU 版（NVIDIA CUDA，torch cu126）
+
+            装好后用内置"更新"即可秒级拉到新版本源码（依赖不变）。
+            > 首次安装会在线拉取全部依赖（CPU ~1.5GB / GPU ~4.5GB），请耐心等待镜像下载。
+          draft: false
+          prerelease: false
+          files: pyappify_dist/*

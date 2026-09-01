@@ -14,6 +14,7 @@ Run:  uv run python scripts/build_full_requirements.py
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -24,6 +25,22 @@ ROOT = Path(__file__).resolve().parents[1]
 # uv export no longer accepts `--python-platform` (removed in uv 0.12); the
 # export follows the lock's platform resolution. The build/CI runs on Windows,
 # so the current-platform export is exactly the target wheel set.
+
+
+def _index_args() -> list[str]:
+    """Allow CI to override the index. GitHub runners live outside mainland
+    China and reach the official PyPI / PyTorch indexes directly; the committed
+    requirements are generated locally with the Tsinghua/NJU mirrors. Empty by
+    default so local dev matches pyproject, and the produced pins are
+    index-independent so the two stay byte-identical."""
+    args: list[str] = []
+    if os.environ.get("LT_REQUIREMENTS_PYPI_INDEX"):
+        args += ["--default-index", os.environ["LT_REQUIREMENTS_PYPI_INDEX"]]
+    if os.environ.get("LT_REQUIREMENTS_PYTORCH_INDEX"):
+        args += ["--index", f"pytorch={os.environ['LT_REQUIREMENTS_PYTORCH_INDEX']}"]
+    return args
+
+
 _EXPORT = [
     "uv",
     "export",
@@ -34,7 +51,7 @@ _EXPORT = [
 
 def _export(extra: list[str]) -> str:
     return subprocess.run(
-        [*_EXPORT, *extra],
+        [*_EXPORT, *_index_args(), *extra],
         cwd=ROOT,
         check=True,
         capture_output=True,
