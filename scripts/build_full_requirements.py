@@ -29,7 +29,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 _DEV_PYPI = "https://pypi.tuna.tsinghua.edu.cn/simple"  # CN-mirror dev default
-_NJU_CU126 = "https://mirror.nju.edu.cn/pytorch/whl/cu126"  # CN-mirror cu126
+_NJU_CU126 = "https://mirror.nju.edu.cn/pytorch/whl/cu126"  # CN-mirror cu126 (dev opt-in)
+_TORCH_CU126 = "https://download.pytorch.org/whl/cu126"  # official cu126 (build default)
 
 
 def _pypi_index() -> str:
@@ -40,9 +41,11 @@ def _pypi_index() -> str:
 
 
 def _torch_index() -> str:
-    """cu126 PyTorch index: local dev uses the NJU mirror (reachable in CN);
-    CI overrides via env to the official index."""
-    return os.environ.get("LT_REQUIREMENTS_PYTORCH_INDEX", _NJU_CU126)
+    """cu126 PyTorch index: default official so the generated pins (and their
+    wheel hashes) match the index pyappify installs from — a generate/install
+    index mismatch fails `pip install -r` on the wheel hash. Local dev can
+    override via env to the NJU mirror."""
+    return os.environ.get("LT_REQUIREMENTS_PYTORCH_INDEX", _TORCH_CU126)
 
 
 def _export(extra: list[str], *, torch_index: str) -> str:
