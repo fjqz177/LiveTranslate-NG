@@ -34,9 +34,9 @@ from livetranslate.asr.controller import AsrController
 from livetranslate.audio.registry import create_audio_backend
 from livetranslate.audio.vad.processor import VADProcessor
 from livetranslate.core.i18n import resolve_ui_lang, set_lang, t
-from livetranslate.core.privacy import redact_text
 from livetranslate.core.paths import LOG_DIR, PROJECT_ROOT, transcripts_dir
 from livetranslate.core.pipeline import Pipeline
+from livetranslate.core.privacy import redact_text
 from livetranslate.core.settings import load_user_settings
 from livetranslate.core.transcript_writer import TranscriptWriter
 from livetranslate.core.translator import Translator

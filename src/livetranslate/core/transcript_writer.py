@@ -7,11 +7,11 @@ when the in-memory message buffer rotates.
 
 import logging
 import threading
-
-from livetranslate.core.privacy import redact_text
 from datetime import datetime
 from pathlib import Path
 from typing import TextIO
+
+from livetranslate.core.privacy import redact_text
 
 log = logging.getLogger("LiveTranslate.Transcript")
 

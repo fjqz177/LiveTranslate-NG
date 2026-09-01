@@ -66,7 +66,8 @@ def _export(extra: list[str], *, torch_index: str) -> str:
             # has it, which would drag e.g. idna==3.4 from the pytorch mirror
             # and break openai. unsafe-best-match lets every non-torch package
             # resolve from all indexes (same strategy ci.yml uses for sync).
-            "--index-strategy", "unsafe-best-match",
+            "--index-strategy",
+            "unsafe-best-match",
             *extra,
         ],
         cwd=ROOT,

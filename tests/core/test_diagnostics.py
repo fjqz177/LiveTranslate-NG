@@ -2,13 +2,13 @@
 
 from pathlib import Path
 
-from livetranslate.core.paths import PROJECT_ROOT
 from livetranslate.core.diagnostics import (
     collect_summary,
     redact_dict,
     redact_text,
     write_redacted_zip,
 )
+from livetranslate.core.paths import PROJECT_ROOT
 
 
 class TestRedactText:

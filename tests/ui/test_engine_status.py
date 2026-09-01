@@ -44,19 +44,11 @@ def test_available_engine_shows_available(panel, monkeypatch):
     assert panel._vad_tab._engine_status_label.text().startswith(t("engine_status_available"))
 
 
-def test_needs_extras_maps_to_available(panel, monkeypatch):
-    # Full-install model: needs-extras maps to available because the engine deps
-    # live in the main environment — there is no separate install step, so the
-    # old "install button + GB size hint" is gone.
-    _status("needs-extras", monkeypatch)
-    panel._vad_tab._refresh_engine_status()
-    assert panel._vad_tab._engine_status_label.text().startswith(t("engine_status_available"))
-
-
 def test_sensevoice_onnx_needs_model_shows_honest_copy(panel, monkeypatch):
-    """M-MATRIX honesty: the default CPU-recommended engine is sensevoice-onnx,
-    which has NO auto-downloader. A needs-model status must show the
-    export/community guidance, not the generic "model downloads on switch"
+    """M-MATRIX honesty: sensevoice-onnx is a selectable torch-free engine
+    (Whisper is the default), and it has NO auto-downloader. A needs-model
+    status must show the export/community guidance, not the generic "model
+    downloads on switch"
     promise (which is false for the ONNX path)."""
     # Default panel selects sensevoice-onnx (no recommended_engine).
     assert panel._vad_tab._selected_engine_id() == "sensevoice-onnx"

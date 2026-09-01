@@ -25,12 +25,6 @@ class _EngineRuntimeMixin:
             return
         status = engine_status(engine_id, _sys.platform)
 
-        # Full-install model: the engine deps live in the main environment
-        # (installed with pyappify), but the GUI import-spec probe may still
-        # report needs-extras for a usable engine — map it to available.
-        if status == "needs-extras":
-            status = "available"
-
         if status == "available":
             text = t("engine_status_available")
         elif status == "not-implemented":

@@ -508,9 +508,7 @@ class Pipeline:
         split_ms = (time.perf_counter() - split_start) * 1000
         if len(sentences) <= 1:
             return False
-        log.debug(
-            f"Interim split [{result.language}] ({split_ms:.1f}ms): {len(sentences)} parts"
-        )
+        log.debug(f"Interim split [{result.language}] ({split_ms:.1f}ms): {len(sentences)} parts")
 
         # All but last are complete; last is still being spoken
         complete = sentences[:-1]

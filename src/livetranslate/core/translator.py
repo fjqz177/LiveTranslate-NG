@@ -10,7 +10,7 @@ from openai import BadRequestError, OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
 from livetranslate.core.i18n import LANGUAGE_DISPLAY
-from livetranslate.core.privacy import redact_dict, redact_text
+from livetranslate.core.privacy import redact_dict
 
 log = logging.getLogger("LiveTranslate.TL")
 

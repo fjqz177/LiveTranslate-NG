@@ -22,8 +22,8 @@ class TestRedactText:
         assert "***" in redact_text("using sk-abcdefg12345xyz")
 
     def test_masks_bearer_token(self):
-        assert "Bearer abcdef12345" != redact_text("Bearer abcdef12345").replace(
-            "***", " abcdef12345"
+        assert (
+            redact_text("Bearer abcdef12345").replace("***", " abcdef12345") != "Bearer abcdef12345"
         )
         out = redact_text("Authorization: Bearer AbC_D-12345678")
         assert "AbC_D-12345678" not in out
