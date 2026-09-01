@@ -115,24 +115,26 @@ jobs:
       # carries old non-torch packages (e.g. idna==3.4) that would otherwise
       # win by index order and break openai.
       - name: Drift gate (requirements-full-*.txt == pyproject extras)
-        shell: pwsh
+        shell: bash
         run: |
-          $pypi = $env:LT_REQUIREMENTS_PYPI_INDEX
-          $pt = $env:LT_REQUIREMENTS_PYTORCH_INDEX
-          uv export --no-dev --no-emit-project --default-index $pypi --index "pytorch=$pt" --index-strategy unsafe-best-match --extra engine-funasr --extra engine-whisper | Out-File -Encoding utf8 $env:RUNNER_TEMP\cpu.txt
-          uv export --no-dev --no-emit-project --default-index $pypi --index "pytorch=$pt" --index-strategy unsafe-best-match --extra engine-funasr --extra engine-whisper --extra engine-cuda | Out-File -Encoding utf8 $env:RUNNER_TEMP\gpu.txt
-          foreach ($pair in @(@("cpu","requirements-full-cpu.txt"),@("gpu","requirements-full-gpu.txt"))) {
-            $gen = "$env:RUNNER_TEMP\$($pair[0]).txt"
-            # Compare only the pin+hash lines. The `# uv export ...` header
-            # comment records the index URLs, which legitimately differ between
-            # a local mirror build and this CI run — the actual pinned wheels
-            # are byte-identical (mirrors of the same wheels).
-            $genLines = Get-Content $gen | Where-Object { $_ -notmatch '^\s*#' }
-            $commLines = Get-Content $pair[1] | Where-Object { $_ -notmatch '^\s*#' }
-            if (Compare-Object $genLines $commLines -SyncWindow 0) {
-              throw "requirements would drift: $($pair[1]) no longer matches pyproject (re-run scripts/build_full_requirements.py locally and commit)"
-            }
-          }
+          # Compare only the pin+hash lines. The generated `# uv export ...`
+          # header records the index URLs, which legitimately differ between the
+          # local-mirror build and this CI run — the pinned wheels are
+          # byte-identical (mirrors of the same wheels). bash redirect gives
+          # LF / no-BOM output that diff's cleanly against the committed LF files
+          # (Out-File -Encoding utf8 adds a BOM that breaks `^#` filtering).
+          uv export --no-dev --no-emit-project --default-index "$LT_REQUIREMENTS_PYPI_INDEX" --index "pytorch=$LT_REQUIREMENTS_PYTORCH_INDEX" --index-strategy unsafe-best-match --extra engine-funasr --extra engine-whisper > "$RUNNER_TEMP/cpu.txt"
+          uv export --no-dev --no-emit-project --default-index "$LT_REQUIREMENTS_PYPI_INDEX" --index "pytorch=$LT_REQUIREMENTS_PYTORCH_INDEX" --index-strategy unsafe-best-match --extra engine-funasr --extra engine-whisper --extra engine-cuda > "$RUNNER_TEMP/gpu.txt"
+          for pair in cpu:requirements-full-cpu.txt gpu:requirements-full-gpu.txt; do
+            f="${pair%%:*}"; comm="${pair#*:}"
+            grep -v '^#' "$RUNNER_TEMP/$f.txt" > "$RUNNER_TEMP/$f.filtered"
+            grep -v '^#' "$comm" > "$RUNNER_TEMP/comm.filtered"
+            if ! diff "$RUNNER_TEMP/$f.filtered" "$RUNNER_TEMP/comm.filtered"; then
+              echo "requirements would drift: $comm no longer matches pyproject (re-run scripts/build_full_requirements.py locally and commit)"
+              exit 1
+            fi
+          done
+          echo "Drift gate OK: requirements-full-{cpu,gpu}.txt match pyproject"
           Write-Host "Drift gate OK: requirements-full-{cpu,gpu}.txt match pyproject"
 
       # Portable executable (staged only when signing, so it can be signed
