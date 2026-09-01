@@ -194,7 +194,7 @@ class SenseVoiceEngine(ASREngineBase):
         if not text:
             return None
 
-        log.debug(f"Raw: {raw_text}")
+        log.debug(f"Raw: {len(raw_text)} chars")
         return TranscriptionResult(
             text=text,
             language=detected_lang,

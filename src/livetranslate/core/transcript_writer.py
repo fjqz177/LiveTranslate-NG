@@ -7,6 +7,8 @@ when the in-memory message buffer rotates.
 
 import logging
 import threading
+
+from livetranslate.core.privacy import redact_text
 from datetime import datetime
 from pathlib import Path
 from typing import TextIO
@@ -48,7 +50,7 @@ class TranscriptWriter:
         try:
             self._base_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:
-            log.error(f"Failed to create transcript dir {self._base_dir}: {e}")
+            log.error(redact_text(f"Failed to create transcript dir {self._base_dir}: {e}"))
             return
         self._session_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         header_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -61,10 +63,10 @@ class TranscriptWriter:
                 self._files[kind] = fp
                 self._paths[kind] = str(path)
             except OSError as e:
-                log.error(f"Failed to open transcript file {path}: {e}")
+                log.error(redact_text(f"Failed to open transcript file {path}: {e}"))
                 self._files[kind] = None
         self._opened = True
-        log.info(f"Transcripts -> {self._base_dir}")
+        log.info(redact_text(f"Transcripts -> {self._base_dir}"))
 
     def write_original(self, msg_id: int, timestamp: str, original: str) -> None:
         if not original:

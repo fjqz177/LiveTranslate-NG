@@ -12,6 +12,7 @@ from livetranslate.asr.protocol import (
     WordTiming,
 )
 from livetranslate.core.i18n import LANGUAGE_DISPLAY
+from livetranslate.core.privacy import redact_text
 
 log = logging.getLogger("LiveTranslate.ASR")
 
@@ -45,7 +46,7 @@ class ASREngine(ASREngineBase):
             download_root=download_root,
         )
         self._set_input_padding(pad_seconds, log_change=False)
-        log.info(f"Model loaded: {model_size} on {device} ({compute_type})")
+        log.info(f"Model loaded: {redact_text(str(model_size))} on {device} ({compute_type})")
         self._log_input_padding()
 
     @staticmethod

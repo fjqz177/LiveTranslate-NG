@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from livetranslate.core.paths import APP_NAME, PROJECT_ROOT, SETTINGS_FILE
+from livetranslate.core.privacy import redact_text
 from livetranslate.modeling.registry import migrate_funasr_settings
 
 log = logging.getLogger("LiveTranslate.Settings")
@@ -32,13 +33,13 @@ def load_settings_from(path: Path) -> dict[str, Any] | None:
             if not isinstance(data, dict):
                 log.warning(
                     "Settings at %s is valid JSON but not an object (%s); using defaults",
-                    path,
+                    redact_text(str(path)),
                     type(data).__name__,
                 )
                 return None
             return data
     except Exception as e:
-        log.warning(f"Failed to load settings from {path}: {e}")
+        log.warning(redact_text(f"Failed to load settings from {path}: {e}"))
     return None
 
 
@@ -54,9 +55,9 @@ def save_settings_to(path: Path, settings: dict[str, Any]) -> None:
         if os.name == "posix":
             os.chmod(tmp, 0o600)
         tmp.replace(path)
-        log.info(f"Settings saved to {path}")
+        log.info(redact_text(f"Settings saved to {path}"))
     except Exception as e:
-        log.warning(f"Failed to save settings to {path}: {e}")
+        log.warning(redact_text(f"Failed to save settings to {path}: {e}"))
 
 
 def _platform_settings_path() -> Path:
@@ -84,7 +85,7 @@ def _migrate_platform_settings() -> dict[str, Any] | None:
         return None
     migrate_funasr_settings(data)
     save_settings_to(SETTINGS_FILE, data)
-    log.info(f"Migrated platformdirs settings {old_path} -> {SETTINGS_FILE}")
+    log.info(redact_text(f"Migrated platformdirs settings {old_path} -> {SETTINGS_FILE}"))
     return data
 
 
@@ -101,7 +102,7 @@ def _migrate_legacy_settings() -> dict[str, Any] | None:
         return None
     migrate_funasr_settings(data)
     save_settings_to(SETTINGS_FILE, data)
-    log.info(f"Migrated legacy settings {LEGACY_SETTINGS_FILE} -> {SETTINGS_FILE}")
+    log.info(redact_text(f"Migrated legacy settings {LEGACY_SETTINGS_FILE} -> {SETTINGS_FILE}"))
     return data
 
 
@@ -119,7 +120,7 @@ def load_user_settings() -> dict[str, Any] | None:
     if data is not None:
         if migrated is None:
             migrate_funasr_settings(data)
-        log.info(f"Loaded saved settings from {SETTINGS_FILE}")
+        log.info(redact_text(f"Loaded saved settings from {SETTINGS_FILE}"))
     return data
 
 

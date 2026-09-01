@@ -34,6 +34,7 @@ from livetranslate.asr.controller import AsrController
 from livetranslate.audio.registry import create_audio_backend
 from livetranslate.audio.vad.processor import VADProcessor
 from livetranslate.core.i18n import resolve_ui_lang, set_lang, t
+from livetranslate.core.privacy import redact_text
 from livetranslate.core.paths import LOG_DIR, PROJECT_ROOT, transcripts_dir
 from livetranslate.core.pipeline import Pipeline
 from livetranslate.core.settings import load_user_settings
@@ -95,7 +96,7 @@ def setup_logging():
     ):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
-    logging.info(f"Log file: {log_file}")
+    logging.info(redact_text(f"Log file: {log_file}"))
 
     # FunASR/ModelScope spam the root logger; suppress after our own init log
     logging.getLogger().setLevel(logging.WARNING)
@@ -332,7 +333,7 @@ class LiveTranslateApp:
             # Degrade instead of crashing (e.g. the shipped default model has
             # no API key until the wizard fills it in): keep the previous
             # translator and surface the copy in the banner.
-            log.warning(f"Translator init failed for {model_config.get('name')}: {e}")
+            log.warning(redact_text(f"Translator init failed for {model_config.get('name')}: {e}"))
             self._recent_errors.append(t("err_401") if "401" in str(e) else str(e))
             if self._overlay:
                 self._overlay.show_error(str(e))
@@ -412,7 +413,7 @@ class LiveTranslateApp:
                 # A remote server that is simply down is an expected, user-actionable
                 # condition, not a bug, so skip the noisy traceback for it.
                 expected = isinstance(e, ConnectionError)
-                log.error(f"Failed to load ASR worker: {e}", exc_info=not expected)
+                log.error(redact_text(f"Failed to load ASR worker: {e}"), exc_info=not expected)
                 if old_state and old_state.get("config"):
                     try:
                         log.info("Restoring previous ASR worker after switch failure")

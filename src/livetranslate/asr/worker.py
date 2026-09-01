@@ -8,6 +8,7 @@ import sys
 import numpy as np
 
 from livetranslate.asr.protocol import error_response, ok_response
+from livetranslate.core.privacy import redact_text
 
 log = logging.getLogger("LiveTranslate.ASRWorker")
 
@@ -59,7 +60,7 @@ def _load_whisper(config: dict):
     # model paths pass through untouched.
     local_path = get_whisper_local_path(model_size, hub=config.get("hub", "ms"))
     if local_path:
-        log.info(f"Loading Whisper from local cache: {local_path}")
+        log.info(f"Loading Whisper from local cache: {redact_text(str(local_path))}")
         model_size = local_path
     return ASREngine(
         model_size=model_size,

@@ -22,6 +22,7 @@ from livetranslate.asr.protocol import (
     EngineCapabilities,
     TranscriptionResult,
 )
+from livetranslate.core.privacy import redact_text
 
 log = logging.getLogger("LiveTranslate.SenseVoiceOnnx")
 
@@ -132,7 +133,7 @@ class SenseVoiceOnnxEngine(ASREngineBase):
         self._pad_seconds = self._read_pad_seconds(pad_seconds)
         self._pad_quantum = round(SAMPLE_RATE * self._pad_seconds)
         self.language: str | None = None
-        log.info(f"SenseVoice (onnx) loaded: {path}")
+        log.info(f"SenseVoice (onnx) loaded: {redact_text(str(path))}")
 
     @staticmethod
     def _load_tokenizer(model_dir: Path) -> object:

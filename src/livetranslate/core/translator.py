@@ -10,6 +10,7 @@ from openai import BadRequestError, OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
 from livetranslate.core.i18n import LANGUAGE_DISPLAY
+from livetranslate.core.privacy import redact_dict, redact_text
 
 log = logging.getLogger("LiveTranslate.TL")
 
@@ -169,9 +170,9 @@ class Translator:
         }
         self._extra_body: dict[str, Any] = dict(extra_body) if extra_body else {}
         if self._overrides:
-            log.info(f"Translator overrides: {self._overrides}")
+            log.info(f"Translator overrides: {redact_dict(self._overrides)}")
         if self._extra_body:
-            log.info(f"Translator extra_body: {self._extra_body}")
+            log.info(f"Translator extra_body: {redact_dict(self._extra_body)}")
         self._system_prompt_template: str = system_prompt or DEFAULT_PROMPT
         self._context_turns: int = 0
         # CORE-7: _history is mutated/read from the 8-worker translation

@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (
 )
 
 from livetranslate.core.i18n import t
+from livetranslate.core.privacy import redact_settings
 from livetranslate.core.settings import SETTINGS_FILE
 from livetranslate.modeling.manager import (
     DEFAULT_FUNASR_MODEL,
@@ -342,9 +343,7 @@ class ControlPanel(QWidget):
         self._translation_tab.collect()
         self._style_tab.collect()
         self._cache_tab.collect()
-        safe = {
-            k: v for k, v in self._current_settings.items() if k not in ("models", "system_prompt")
-        }
+        safe = redact_settings(self._current_settings, exclude=("models", "system_prompt"))
         log.info(f"Settings applied: {safe}")
         # Commit the draft into the store (replace-merge + atomic save), then
         # hand out a fresh snapshot — never the live internal dict.

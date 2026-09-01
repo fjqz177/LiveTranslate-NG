@@ -36,6 +36,8 @@ from typing import TYPE_CHECKING, Literal
 
 import httpx
 
+from livetranslate.core.privacy import redact_text
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -294,5 +296,5 @@ def download_repo(
             downloaded += entry.size
         if progress_cb:
             progress_cb(downloaded, total)
-    log.info("Downloaded %s -> %s", repo_id, dest_root)
+    log.info("Downloaded %s -> %s", repo_id, redact_text(str(dest_root)))
     return dest_root

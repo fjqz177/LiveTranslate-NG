@@ -21,6 +21,7 @@ from pathlib import Path
 import numpy as np
 
 from livetranslate.core.paths import models_dir
+from livetranslate.core.privacy import redact_text
 
 log = logging.getLogger("LiveTranslate.VAD")
 
@@ -103,7 +104,7 @@ class SileroConfidenceScorer:
             path, providers=["CPUExecutionProvider"], sess_options=opts
         )
         self.reset()
-        log.info(f"Silero VAD (onnx) loaded: {path}")
+        log.info(redact_text(f"Silero VAD (onnx) loaded: {path}"))
 
     @property
     def onset_threshold(self) -> float:

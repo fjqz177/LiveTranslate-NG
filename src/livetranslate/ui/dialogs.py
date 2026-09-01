@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import (
 )
 
 from livetranslate.core.i18n import t
+from livetranslate.core.privacy import redact_text
 from livetranslate.modeling.manager import download_asr, download_silero
 
 log = logging.getLogger("LiveTranslate.Dialogs")
@@ -222,7 +223,7 @@ class ModelDownloadDialog(QDialog):
                 self._progress_signal.emit(done, total)
         except Exception as e:
             self._error = str(e)
-            log.error(f"Download failed: {e}", exc_info=True)
+            log.error(redact_text(f"Download failed: {e}"), exc_info=True)
 
     def _cleanup_capture(self):
         """Restore stderr and detach the log handler (idempotent)."""

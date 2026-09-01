@@ -112,7 +112,7 @@ class FunASRNanoEngine(ASREngineBase):
 
         detected_lang = self.language or self._guess_language(text)
 
-        log.debug(f"ASR: {text}")
+        log.debug(f"ASR: {len(text)} chars")
         return TranscriptionResult(
             text=text,
             language=detected_lang,

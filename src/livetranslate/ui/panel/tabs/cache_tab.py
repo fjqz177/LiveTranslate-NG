@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
 
 from livetranslate.core.i18n import t
 from livetranslate.core.paths import transcripts_dir
+from livetranslate.core.privacy import redact_text
 from livetranslate.modeling.manager import (
     MODELS_DIR,
     dir_size,
@@ -175,9 +176,9 @@ class CacheTab(TabBase):
 
         try:
             shutil.rmtree(path)
-            log.info(f"Deleted: {path}")
+            log.info(redact_text(f"Deleted: {path}"))
         except OSError as e:
-            log.error(f"Failed to delete {path}: {e}")
+            log.error(redact_text(f"Failed to delete {path}: {e}"))
             QMessageBox.warning(self, t("dialog_delete_title"), str(e))
             return
         self.refresh()
@@ -190,9 +191,9 @@ class CacheTab(TabBase):
         def _delete_one(path):
             try:
                 shutil.rmtree(path)
-                log.info(f"Deleted: {path}")
+                log.info(redact_text(f"Deleted: {path}"))
             except Exception as e:
-                log.error(f"Failed to delete {path}: {e}")
+                log.error(redact_text(f"Failed to delete {path}: {e}"))
 
         total_size = sum(s for _, _, s in self._cache_entries)
         ret = QMessageBox.warning(

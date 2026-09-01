@@ -5,6 +5,7 @@ import httpx
 import numpy as np
 
 from livetranslate.asr.protocol import TranscriptionResult
+from livetranslate.core.privacy import redact_text
 
 log = logging.getLogger("LiveTranslate.ASR.Remote")
 
@@ -45,10 +46,12 @@ class RemoteASREngine:
             info = r.json()
         except Exception as e:
             raise ConnectionError(
-                f"Cannot reach remote ASR server at {server_url}: {e}. "
-                f"Make sure asr_server.py is running and the URL is correct."
+                redact_text(
+                    f"Cannot reach remote ASR server at {server_url}: {e}. "
+                    f"Make sure asr_server.py is running and the URL is correct."
+                )
             ) from e
-        log.info(f"Connected to remote ASR server: {info}")
+        log.info(redact_text(f"Connected to remote ASR server: {info}"))
 
     # --- ASRClient-compatible shim ----------------------------------------
     # The pipeline drives the active ASR backend through the ASRClient interface
@@ -100,7 +103,7 @@ class RemoteASREngine:
             r.raise_for_status()
             data = r.json()
         except Exception as e:
-            log.error(f"Remote ASR request failed: {e}")
+            log.error(redact_text(f"Remote ASR request failed: {e}"))
             raise RemoteASRError(f"Remote ASR request failed: {e}") from e
 
         text = data.get("text")
@@ -108,7 +111,7 @@ class RemoteASREngine:
             return None
 
         elapsed = data.get("elapsed", 0)
-        log.debug(f"Remote ASR: {elapsed:.2f}s -> {text[:60]}")
+        log.debug(f"Remote ASR: {elapsed:.2f}s -> {len(text)} chars")
 
         detected_lang = data.get("language", "unknown")
         return TranscriptionResult(

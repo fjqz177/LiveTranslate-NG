@@ -4,6 +4,7 @@ import logging
 import numpy as np
 
 from livetranslate.asr.protocol import ASREngineBase, TranscriptionResult
+from livetranslate.core.privacy import redact_text
 
 log = logging.getLogger("LiveTranslate.AnimeWhisper")
 
@@ -41,7 +42,7 @@ class AnimeWhisperEngine(ASREngineBase):
             batch_size=1,
         )
         self.language = "ja"
-        log.info(f"AnimeWhisper loaded from {model} on {device}")
+        log.info(f"AnimeWhisper loaded from {redact_text(str(model))} on {device}")
 
     def set_language(self, language: str):
         # Model is Japanese-only; ignore attempts to change

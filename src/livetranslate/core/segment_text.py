@@ -59,7 +59,7 @@ def strip_committed_overlap(text: str, committed_tail: str) -> str:
         if text_lower[:overlap_len] == tail[-overlap_len:]:
             stripped = text[overlap_len:].strip()
             if stripped:
-                log.debug(f"Stripped echo overlap ({overlap_len} chars): '{text[:overlap_len]}...'")
+                log.debug(f"Stripped echo overlap ({overlap_len} chars)")
                 return stripped
             return ""
     return text

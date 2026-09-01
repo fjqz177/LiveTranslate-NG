@@ -1,10 +1,10 @@
 import contextlib
 import logging
 import os
-import re
 from pathlib import Path
 
 from livetranslate.core.paths import models_dir
+from livetranslate.core.privacy import mask_proxy_url, redact_text
 
 log = logging.getLogger("LiveTranslate.ModelManager")
 
@@ -52,7 +52,7 @@ def _proxy_env(proxy: str):
             os.environ.pop("NO_PROXY", None)
             handler = urllib.request.ProxyHandler({"http": proxy, "https": proxy})
         urllib.request.install_opener(urllib.request.build_opener(handler))
-        log.info(f"Download proxy active: {_mask_proxy_url(proxy)}")
+        log.info(f"Download proxy active: {mask_proxy_url(proxy)}")
         yield
     finally:
         for key, value in saved_env.items():
@@ -152,7 +152,7 @@ def apply_cache_env():
     os.environ["MODELSCOPE_CACHE"] = os.path.join(resolved, "modelscope")
     os.environ["HF_HOME"] = os.path.join(resolved, "huggingface")
     os.environ["TORCH_HOME"] = os.path.join(resolved, "torch")
-    log.info(f"Cache env set: {resolved}")
+    log.info(f"Cache env set: {redact_text(resolved)}")
 
 
 def get_missing_models(engine, model_size, hub) -> list:
@@ -205,15 +205,6 @@ SILERO_HUB_REF = "snakers4/silero-vad:v5.1"
 # verification. Relaxing verification silently would gut the supply chain
 # trust model — it only happens when the user explicitly opts in.
 RELAX_SSL_ENV = "LIVETRANSLATE_RELAX_SSL"
-
-_PROXY_USERINFO_RE = re.compile(r"(?<=//)[^/@\s]+(?=@)")
-
-
-def _mask_proxy_url(url: str) -> str:
-    """Mask the userinfo segment of a proxy URL (CORE-4): 'http://user:pw@h:1'
-    -> 'http://***@h:1'. Proxy credentials must never reach logs or the
-    diagnostics bundle."""
-    return _PROXY_USERINFO_RE.sub("***", url)
 
 
 def download_silero(proxy: str = "system"):
@@ -355,9 +346,9 @@ def neutralize_funasr_requirements(model_dir) -> None:
     if req.exists():
         try:
             req.replace(req.with_name("requirements.txt.bundled"))
-            log.info(f"Skipped FunASR requirements install: {req}")
+            log.info(f"Skipped FunASR requirements install: {redact_text(str(req))}")
         except OSError as exc:
-            log.warning(f"Failed to neutralize {req}: {exc}")
+            log.warning(redact_text(f"Failed to neutralize {req}: {exc}"))
 
 
 def dir_size(path) -> int:

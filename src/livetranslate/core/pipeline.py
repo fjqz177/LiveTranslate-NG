@@ -25,6 +25,7 @@ from numpy.typing import NDArray
 
 from livetranslate.core.errors import classify_translate_error
 from livetranslate.core.i18n import t
+from livetranslate.core.privacy import redact_text
 from livetranslate.core.segment_text import (
     is_short_utterance,
     split_sentences,
@@ -376,7 +377,7 @@ class Pipeline:
         try:
             result, asr_ms = self._asr_ctl.transcribe(speech_segment, "segment")
         except Exception as e:
-            log.error(f"ASR error: {e}", exc_info=True)
+            log.error(f"ASR error: {redact_text(str(e))}", exc_info=True)
             return
         if asr_ms == 0:
             return
@@ -484,7 +485,7 @@ class Pipeline:
         try:
             result, asr_ms = self._asr_ctl.transcribe(audio, "interim")
         except Exception as e:
-            log.error(f"Interim ASR error: {e}", exc_info=True)
+            log.error(f"Interim ASR error: {redact_text(str(e))}", exc_info=True)
             return False
 
         if asr_ms == 0:
@@ -508,7 +509,7 @@ class Pipeline:
         if len(sentences) <= 1:
             return False
         log.debug(
-            f"Interim split [{result.language}] ({split_ms:.1f}ms): {len(sentences)} parts -> {sentences}"
+            f"Interim split [{result.language}] ({split_ms:.1f}ms): {len(sentences)} parts"
         )
 
         # All but last are complete; last is still being spoken
@@ -545,7 +546,7 @@ class Pipeline:
             if is_short_utterance(text):
                 self._interim_pending += text
                 log.debug(
-                    f"Interim short utterance buffered: '{text}', pending='{self._interim_pending}'"
+                    f"Interim short utterance buffered: {len(text)} chars, pending={len(self._interim_pending)} chars"
                 )
                 continue
 
@@ -582,7 +583,7 @@ class Pipeline:
         asr_lang_setting = self._asr_language
         if asr_lang_setting != "auto" and source_lang != asr_lang_setting:
             log.info(
-                f"Language filter: expected '{asr_lang_setting}' but got '{source_lang}', discarding: {original_text[:60]}"
+                f"Language filter: expected '{asr_lang_setting}' but got '{source_lang}', discarding {len(original_text)} chars"
             )
             return
 
@@ -643,7 +644,7 @@ class Pipeline:
         try:
             result, asr_ms = self._asr_ctl.transcribe(speech_segment, "interim_final")
         except Exception as e:
-            log.error(f"Interim final ASR error: {e}", exc_info=True)
+            log.error(f"Interim final ASR error: {redact_text(str(e))}", exc_info=True)
             return
         if asr_ms == 0:
             return
@@ -676,7 +677,7 @@ class Pipeline:
         alnum_chars = sum(1 for c in original_text if c.isalnum())
         if seg_len >= 2.0 and alnum_chars <= 3:
             log.debug(
-                f"Noise filter: {seg_len:.1f}s segment produced only '{original_text}', skipping"
+                f"Noise filter: {seg_len:.1f}s segment produced only {alnum_chars} alnum chars, skipping"
             )
             return
 
@@ -885,9 +886,9 @@ class Pipeline:
                     ConnectionError,
                 ),
             ):
-                log.warning(f"Translate error: {e}")
+                log.warning(f"Translate error: {redact_text(str(e))}")
             else:
-                log.error(f"Translate error: {e}", exc_info=True)
+                log.error(f"Translate error: {redact_text(str(e))}", exc_info=True)
             self._transcript.finalize_no_translation(msg_id)
             key = classify_translate_error(
                 e, using_proxy=getattr(self._translator, "proxy", "none") != "none"
@@ -940,9 +941,9 @@ class Pipeline:
                         ConnectionError,
                     ),
                 ):
-                    log.warning(f"Extra translate error: {e}")
+                    log.warning(f"Extra translate error: {redact_text(str(e))}")
                 else:
-                    log.error(f"Extra translate error: {e}", exc_info=True)
+                    log.error(f"Extra translate error: {redact_text(str(e))}", exc_info=True)
 
         for future in as_completed(futures):
             _record(future)
