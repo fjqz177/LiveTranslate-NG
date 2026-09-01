@@ -3,14 +3,13 @@
 Guards the split contract (zero public-symbol change):
 - VadTab is actually an instance of both plain-object mixins (MRO valid,
   mixin methods resolve on the concrete instance);
-- the moved engine-install / whisper-download methods still run without
+- the moved engine-status / whisper-download methods still run without
   raising on a fully-built panel;
 - the engine dropdown is built from the single-source registry table
   (GUI_ENGINE_ORDER / ENGINE_REGISTRY) — 5 items, userData = registry id.
 """
 
 import pytest
-from PyQt6.QtWidgets import QMessageBox
 
 from livetranslate.asr.registry import ENGINE_REGISTRY, GUI_ENGINE_ORDER
 from livetranslate.ui.panel.panel import ControlPanel
@@ -52,12 +51,8 @@ def test_vadtab_mixins_and_mro(panel):
     # The moved methods resolve through the instance (mixin methods run on the
     # concrete VadTab), and the signals stay on VadTab.
     assert callable(tab._refresh_engine_status)
-    assert callable(tab._install_engine_deps)
-    assert callable(tab._on_engine_install_finished)
     assert callable(tab._populate_whisper_models)
     assert callable(tab._download_whisper)
-    assert hasattr(tab, "engine_install_finished")
-    assert hasattr(tab, "runtime_progress")
 
 
 def test_engine_order_matches_gui_registry(panel):
@@ -85,15 +80,3 @@ def test_populate_whisper_models_no_raise(panel):
     tab = panel._vad_tab
     tab._populate_whisper_models(tab.settings.get("whisper_model_size", "medium"))
     assert tab._whisper_size_combo.count() > 0
-
-
-def test_install_engine_deps_no_raise_dev(panel, monkeypatch):
-    # Dev (non-frozen) install path uses uv sync; with no uv on PATH the
-    # method should show a user-facing warning instead of raising. Swallow the
-    # modal so it can't block the test run.
-    monkeypatch.setattr("shutil.which", lambda _name: None)
-    warned = []
-    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: warned.append(a)))
-    tab = panel._vad_tab
-    tab._install_engine_deps()  # falls into _install_dev_extras -> warning, no raise
-    assert warned, "no uv -> user-facing warning expected"

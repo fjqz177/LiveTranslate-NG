@@ -24,9 +24,6 @@ datas = [
     (str(ROOT / "i18n" / "en.yaml"), "i18n"),
     (str(ROOT / "i18n" / "CHANGELOG_zh.md"), "i18n"),
     (str(ROOT / "i18n" / "CHANGELOG_en.md"), "i18n"),
-    # Variant requirements for the embedded uv (SelfServe P1-B2): pinned +
-    # hashed, installed with `uv pip install -r` into the engine venv.
-    (str(ROOT / "runtime" / "requirements"), "runtime/requirements"),
 ]
 binaries = []
 hiddenimports = []

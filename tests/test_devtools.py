@@ -15,7 +15,7 @@ def test_gate_contains_all_steps():
         assert tool in steps, f"gate missing step: {tool}"
 
 
-def test_gate_steps_use_uv_runner():
+def test_gate_steps_are_uv_runnable():
     # Every step must be runnable regardless of venv activation.
     for step in _GATE:
         assert step[0] == "uv", f"step not uv-runnable: {step}"

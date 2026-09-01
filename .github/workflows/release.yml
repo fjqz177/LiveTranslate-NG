@@ -47,22 +47,9 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
-      # M-VENV drift gate (engine-venv runtime dependency split): this job
-      # re-resolves against the committed uv.lock with network, so it is the
-      # single place that regenerates the shipped variant requirements from a
-      # fresh `uv export --no-dev` and fails the release if they drifted.
-      # Deliberately NOT in scripts/package_windows.ps1 — two checks of the
-      # same invariant is duplication.
-      - name: Drift gate (variant requirements == uv.lock)
-        shell: bash
-        run: |
-          uv run python scripts/build_runtime_variants.py --force
-          git diff --exit-code -- runtime/requirements
-
-      # Single packaging entrypoint: sync → variant requirements → onedir →
-      # tools\{uv,python} → Inno setup.exe → frozen --smoke → sha256. This is
-      # the same script a developer runs locally, so local and CI cannot
-      # diverge.
+      # Single packaging entrypoint: sync → onedir → Inno setup.exe →
+      # frozen --smoke → sha256. This is the same script a developer runs
+      # locally, so local and CI cannot diverge.
       - name: Package (single entrypoint)
         shell: bash
         run: pwsh -NoProfile -File scripts/package_windows.ps1 -Version "${VERSION#v}"

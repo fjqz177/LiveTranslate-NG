@@ -11,9 +11,10 @@ excluded) that:
 3. No live mlx-whisper / whisper-cpp / engine-mlx / engine-whispercpp
    engine reference remains (darwin-only dead stubs deleted by the
    Windows-only convergence).
-4. No reference resolves to a module / script deleted by M-WINONLY
-   (permission_registry / asr.integrity / permission_backends /
-   package_macos / package_linux).
+4. No reference resolves to a module / script deleted by M-WINONLY or the
+   full-install model (permission_registry / asr.integrity /
+   permission_backends / package_macos / package_linux / engine_runtime /
+   uv_runner / dependency_dialog / build_runtime_variants).
 
 It deliberately does NOT assert "no sys.platform anywhere": the surviving
 uses are intentional (the __main__.py torch gate, the devtools.py
@@ -42,13 +43,20 @@ PYPROJECT = PROJECT_ROOT / "pyproject.toml"
 # scanners read as a policy table, not ad-hoc literals.
 CUDA_FORBIDDEN = ("cu128",)
 MLX_FORBIDDEN = ("mlx-whisper", "whisper-cpp", "engine-mlx", "engine-whispercpp")
-# Modules / scripts deleted by M-WINONLY; any surviving reference is stale.
+# Modules / scripts deleted by M-WINONLY or the full-install model
+# (runtime engine variant install path); any surviving reference is stale.
 DELETED_MODULES = (
     "permission_registry",
     "asr.integrity",
     "permission_backends",
     "package_macos",
     "package_linux",
+    # Full-install model (2026-09-01): engines ship with the app (pyappify), so
+    # the engine_venv / embedded-uv / variant-requirements path is gone.
+    "engine_runtime",
+    "uv_runner",
+    "dependency_dialog",
+    "build_runtime_variants",
 )
 
 

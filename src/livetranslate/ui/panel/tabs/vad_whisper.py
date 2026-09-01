@@ -94,22 +94,6 @@ class _WhisperDownloadMixin:
         hub = self.settings.get("hub", "ms")
         if is_asr_cached("whisper", size, hub):
             return
-        # Ordering (user report, 2026-09-01): don't download a model the
-        # runtime can't load. Whisper is venv-backed, so a frozen build with no
-        # installed variant must install the engine deps first.
-        import sys as _sys
-
-        from PyQt6.QtWidgets import QMessageBox
-
-        from livetranslate.core import engine_runtime
-
-        if (
-            "whisper" in engine_runtime.VENV_BACKED_ENGINES
-            and getattr(_sys, "frozen", False)
-            and engine_runtime.active_variant() is None
-        ):
-            QMessageBox.warning(self, t("btn_download_whisper"), t("engine_runtime_needed"))
-            return
         missing = get_missing_models("whisper", size, hub)
         missing = [m for m in missing if m["type"] != "silero-vad"]
         if not missing:

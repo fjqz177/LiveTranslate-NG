@@ -8,20 +8,12 @@ these tests need no QApplication — the plan/routing logic under test is pure.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
 
 from livetranslate.ui.app_services.settings_applier import apply_settings
 from livetranslate.ui.app_services.worker_config import build_worker_config
 
 # ── Shared fixtures / fakes ──────────────────────────────────────────────
-
-
-def _posix(paths) -> list[str]:
-    """Normalize Windows paths to forward slashes for stable assertions."""
-    return [p.replace("\\", "/") for p in paths]
 
 
 def _base_config():
@@ -66,22 +58,12 @@ def _patch_state(monkeypatch):
         "livetranslate.ui.app_services.worker_config.sensevoice_onnx_model_present",
         lambda: True,
     )
-    monkeypatch.setattr("livetranslate.core.engine_runtime.active_variant", lambda: None)
-
-
-def _patch_variant(monkeypatch, variant: str):
-    monkeypatch.setattr("livetranslate.core.engine_runtime.active_variant", lambda: variant)
-    monkeypatch.setattr(
-        "livetranslate.core.engine_runtime.variant_site_packages",
-        lambda v: Path("C:/engines") / v / ".venv/Lib/site-packages",
-    )
 
 
 # ── build_worker_config: pure plan ───────────────────────────────────────
 
 
-def test_whisper_plan_signature_and_fields(_patch_state, monkeypatch):
-    _patch_variant(monkeypatch, "cpu")
+def test_whisper_plan_signature_and_fields(_patch_state):
     plan = build_worker_config(
         _base_config(),
         {"asr_engine": "whisper", "whisper_model_size": "small", "hub": "hf"},
@@ -94,15 +76,13 @@ def test_whisper_plan_signature_and_fields(_patch_state, monkeypatch):
     assert plan.worker_config["engine_type"] == "whisper"
     assert plan.worker_config["model_size"] == "small"
     assert plan.worker_config["pad_seconds"] == 0.4  # whisper pad key
-    assert _posix(plan.worker_config["pythonpaths"]) == ["C:/engines/cpu/.venv/Lib/site-packages"]
     assert plan.target_state["whisper_model_size"] == "small"
     assert plan.target_state["display_name"] == "Whisper small"
     assert plan.sensevoice_missing is False
     assert plan.already_ready is False
 
 
-def test_funasr_plan_signature_and_fields(_patch_state, monkeypatch):
-    _patch_variant(monkeypatch, "cpu")
+def test_funasr_plan_signature_and_fields(_patch_state):
     plan = build_worker_config(
         _base_config(),
         {"asr_engine": "funasr", "funasr_model": "funasr-nano-2512", "hub": "ms"},
@@ -114,7 +94,6 @@ def test_funasr_plan_signature_and_fields(_patch_state, monkeypatch):
     # signature model is the (normalized) funasr model key
     assert plan.signature == ("funasr", "funasr-nano-2512", "cpu", "ms", "int8")
     assert plan.worker_config["pad_seconds"] == 0.5  # sensevoice/funasr pad key
-    assert _posix(plan.worker_config["pythonpaths"]) == ["C:/engines/cpu/.venv/Lib/site-packages"]
     assert plan.target_state["funasr_model_key"] == "funasr-nano-2512"
     assert plan.target_state["display_name"] == "Fun-ASR-Nano"
 
@@ -136,23 +115,7 @@ def test_remote_whisper_plan_url_and_token_signature(_patch_state):
     assert plan.worker_config["remote_asr_url"] == "http://10.0.0.5:9000"
     assert plan.worker_config["remote_asr_token"] == "tok123"
     assert plan.worker_config["pad_seconds"] is None
-    # remote-whisper is base-native → no venv pythonpaths, even with a variant.
-    assert plan.worker_config["pythonpaths"] == []
     assert plan.target_state["device_label"] == "http://10.0.0.5:9000"
-
-
-def test_pythonpaths_filled_only_for_variant_backed_engines(_patch_state, monkeypatch):
-    # A venv-backed engine (funasr) with an active variant → pythonpaths filled.
-    _patch_variant(monkeypatch, "cpu")
-    plan = build_worker_config(_base_config(), {"asr_engine": "funasr"}, _FakeCtl(), "funasr")
-    assert _posix(plan.worker_config["pythonpaths"]) == ["C:/engines/cpu/.venv/Lib/site-packages"]
-
-    # Base-native sensevoice-onnx: even with a variant active, no pythonpaths.
-    monkeypatch.setattr("livetranslate.core.engine_runtime.active_variant", lambda: "cpu")
-    plan = build_worker_config(
-        _base_config(), {"asr_engine": "sensevoice-onnx"}, _FakeCtl(), "sensevoice-onnx"
-    )
-    assert plan.worker_config["pythonpaths"] == []
 
 
 @pytest.mark.parametrize(
@@ -194,33 +157,6 @@ def test_already_ready_flag(_patch_state):
         _base_config(), {"asr_engine": "whisper"}, _FakeCtl(ready=True), "whisper"
     )
     assert plan.already_ready is True
-
-
-def _patch_frozen(monkeypatch):
-    monkeypatch.setattr(sys, "frozen", True, raising=False)
-
-
-def test_runtime_missing_for_frozen_venv_backed_without_variant(_patch_state, monkeypatch):
-    """User report 2026-09-01: a venv-backed engine (frozen build, no installed
-    variant) must flag runtime_missing so the caller installs the deps BEFORE
-    downloading a model — otherwise the downloaded model can't be loaded."""
-    _patch_frozen(monkeypatch)
-    plan = build_worker_config(_base_config(), {"asr_engine": "whisper"}, _FakeCtl(), "whisper")
-    assert plan.runtime_missing is True
-    plan = build_worker_config(_base_config(), {"asr_engine": "funasr"}, _FakeCtl(), "funasr")
-    assert plan.runtime_missing is True
-    # Base-native sensevoice-onnx needs no runtime variant.
-    plan = build_worker_config(
-        _base_config(), {"asr_engine": "sensevoice-onnx"}, _FakeCtl(), "sensevoice-onnx"
-    )
-    assert plan.runtime_missing is False
-
-
-def test_runtime_not_missing_when_variant_installed(_patch_state, monkeypatch):
-    _patch_frozen(monkeypatch)
-    _patch_variant(monkeypatch, "cpu")
-    plan = build_worker_config(_base_config(), {"asr_engine": "whisper"}, _FakeCtl(), "whisper")
-    assert plan.runtime_missing is False
 
 
 # ── apply_settings: routing to collaborators ─────────────────────────────

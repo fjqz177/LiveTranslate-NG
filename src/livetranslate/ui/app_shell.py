@@ -378,6 +378,11 @@ def build_tray_shell(
         if engine_id is None:
             return True  # unknown / not selectable -> don't nag
         status = engine_status(engine_id, _sys.platform)
+        # Full-install model: engine deps live in the main env (installed with
+        # pyappify), but the GUI import-spec probe may still report
+        # needs-extras for a usable engine — treat it as available.
+        if status == "needs-extras":
+            status = "available"
         return status in ("available", "unsupported", "not-implemented")
 
     def _refresh_empty_guide():

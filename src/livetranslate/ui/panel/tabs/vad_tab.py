@@ -1,13 +1,12 @@
 """VAD / ASR tab: engine selection, devices, VAD thresholds and timing.
 
-M-SPLIT (2026-08-31): the engine-install / variant orchestration methods now
-live in ``vad_engine._EngineRuntimeMixin`` and the whisper-model-download
-methods in ``vad_whisper._WhisperDownloadMixin``; this module composes them
-into ``VadTab``. The ``engine_install_finished`` / ``runtime_progress`` signals
-stay on the concrete ``VadTab`` (the mixins are plain objects).
+M-SPLIT (2026-08-31): the engine-orchestration methods now live in
+``vad_engine._EngineRuntimeMixin`` and the whisper-model-download methods in
+``vad_whisper._WhisperDownloadMixin``; this module composes them into
+``VadTab``.
 """
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -45,9 +44,6 @@ from livetranslate.ui.panel.tabs.vad_whisper import _WhisperDownloadMixin
 
 
 class VadTab(TabBase, _EngineRuntimeMixin, _WhisperDownloadMixin):
-    engine_install_finished = pyqtSignal()
-    runtime_progress = pyqtSignal(str)
-
     def __init__(self, panel):
         super().__init__(panel)
         layout = QVBoxLayout(self)
@@ -95,23 +91,10 @@ class VadTab(TabBase, _EngineRuntimeMixin, _WhisperDownloadMixin):
         self._engine_status_label = QLabel()
         self._engine_status_label.setObjectName("hintLabel")
         self._engine_status_label.setWordWrap(True)
-        self._engine_install_btn = QPushButton(t("btn_install_engine"))
-        self._engine_install_btn.hide()
-        self._engine_install_btn.clicked.connect(self._install_engine_deps)
-        self.engine_install_finished.connect(self._on_engine_install_finished)
-        self._runtime_switch_btn = QPushButton(t("runtime_btn_switch"))
-        self._runtime_switch_btn.hide()
-        self._runtime_switch_btn.clicked.connect(self._switch_variant)
-        self._runtime_remove_btn = QPushButton(t("runtime_btn_remove"))
-        self._runtime_remove_btn.hide()
-        self._runtime_remove_btn.clicked.connect(self._remove_variant)
         self._engine_status_row = QWidget()
         status_row = QHBoxLayout(self._engine_status_row)
         status_row.setContentsMargins(0, 0, 0, 0)
         status_row.addWidget(self._engine_status_label, 1)
-        status_row.addWidget(self._engine_install_btn)
-        status_row.addWidget(self._runtime_switch_btn)
-        status_row.addWidget(self._runtime_remove_btn)
         self._refresh_engine_status()
         self._asr_engine.currentIndexChanged.connect(lambda _i: self._refresh_engine_status())
 
@@ -454,31 +437,6 @@ class VadTab(TabBase, _EngineRuntimeMixin, _WhisperDownloadMixin):
         self._hub_combo.setCurrentIndex(0 if saved_hub == "ms" else 1)
         self._hub_combo.currentIndexChanged.connect(self.auto_save)
         form.addRow(t("label_hub"), self._hub_combo)
-
-        self._runtime_mirror = QComboBox()
-        for _key, _label in (
-            ("auto", t("runtime_mirror_auto")),
-            ("official", t("runtime_mirror_official")),
-            ("tsinghua", t("runtime_mirror_tsinghua")),
-            ("aliyun", t("runtime_mirror_aliyun")),
-            ("nju", t("runtime_mirror_nju")),
-            ("ustc", t("runtime_mirror_ustc")),
-        ):
-            self._runtime_mirror.addItem(_label, _key)
-        mirror = s.get("engine_runtime", {}).get("mirror", "auto")
-        idx = self._runtime_mirror.findData(mirror)
-        self._runtime_mirror.setCurrentIndex(idx if idx >= 0 else 0)
-        self._runtime_mirror.currentIndexChanged.connect(self._on_mirror_changed)
-        form.addRow(t("label_pypi_mirror"), self._runtime_mirror)
-
-        self._torch_mirror = QComboBox()
-        self._torch_mirror.addItem(t("torch_mirror_official"), "official")
-        self._torch_mirror.addItem(t("torch_mirror_nju"), "nju")
-        torch_mirror = s.get("engine_runtime", {}).get("torch_mirror", "official")
-        idx = self._torch_mirror.findData(torch_mirror)
-        self._torch_mirror.setCurrentIndex(idx if idx >= 0 else 0)
-        self._torch_mirror.currentIndexChanged.connect(self._on_torch_mirror_changed)
-        form.addRow(t("label_torch_mirror"), self._torch_mirror)
 
         self._proxy_mode = QComboBox()
         self._proxy_mode.addItems([t("proxy_none"), t("proxy_system"), t("proxy_custom")])

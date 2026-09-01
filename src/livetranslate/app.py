@@ -18,12 +18,12 @@ from typing import Any
 
 import yaml
 
-# torch is optional at the GUI layer (engine groups own it). The entry
-# shim imports torch before PyQt6 on Windows when it is installed (DLL order);
-# the memory diagnostics below degrade gracefully when it is absent.
+# torch is present in the base install (engine deps ship with the package).
+# The entry shim imports torch before PyQt6 on Windows (DLL order); the
+# memory diagnostics below degrade gracefully in split installs.
 try:
     import torch
-except ImportError:  # base install without engine extras
+except ImportError:  # unusual split install; keep diagnostics graceful
     torch = None
 
 from PyQt6.QtCore import QTimer
@@ -379,35 +379,6 @@ class LiveTranslateApp:
 
         parent = self._panel if self._panel and self._panel.isVisible() else self._overlay
 
-        # Ordering (user report, 2026-09-01): a venv-backed engine whose runtime
-        # variant is not installed must install its deps FIRST, before any model
-        # download — otherwise the downloaded model can't be loaded. Gate the
-        # switch on the runtime; the model download below only runs once the
-        # deps are present (or for a base-native engine that needs no variant).
-        if plan.runtime_missing and not self._smoke:
-            from livetranslate.core.systeminfo import detect_variant
-            from livetranslate.ui.dependency_dialog import EngineBootstrapDialog
-
-            prefs = settings.get("engine_runtime") or {}
-            gate = EngineBootstrapDialog(
-                detect_variant(),
-                mirror=prefs.get("mirror", "auto"),
-                torch_mirror=prefs.get("torch_mirror", "official"),
-                parent=parent,
-            )
-            if gate.exec() != QDialog.DialogCode.Accepted:
-                log.info("Engine runtime install cancelled; switch aborted")
-                ctl.refresh_ready()
-                return
-            # A variant is now active; re-plan so the cache check / switch below
-            # see the runtime as ready.
-            plan = build_worker_config(self._config, settings, ctl, engine_type)
-            if plan.runtime_missing:
-                log.warning("Engine runtime still missing after install; aborting switch")
-                ctl.refresh_ready()
-                return
-            log.info("Engine runtime installed; continuing the engine switch")
-
         if not plan.cached:
             missing = get_missing_models(plan.engine_type, plan.cache_model_key, plan.hub)
             missing = [m for m in missing if m["type"] != "silero-vad"]
@@ -592,17 +563,6 @@ def main():
 
     setup_logging()
     log.info("LiveTranslate starting...")
-    # Engine-area recovery (SelfServe P1-B1): an install that died mid-flight
-    # (crash between begin_install and abort_install — measured with the
-    # GBK-decode crash) leaves meta.json state="installing" plus a .staging-*
-    # dir, which would strand every later install with "another engine
-    # install is in flight". recover() is idempotent for healthy areas.
-    try:
-        from livetranslate.core import engine_runtime
-
-        engine_runtime.recover()
-    except Exception:
-        log.exception("engine area recovery failed (corrupt meta.json?)")
     config = load_config()
     config.setdefault("asr", {})
     config["asr"].setdefault("asr_engine", "funasr")

@@ -1,9 +1,6 @@
-"""Engine status row + one-click dependency install tests (识别页 §3.2)."""
-
-import sys
+"""Engine status row tests (识别页 §3.2)."""
 
 import pytest
-from PyQt6.QtWidgets import QMessageBox
 
 from livetranslate.core.i18n import t
 from livetranslate.ui.panel.panel import ControlPanel
@@ -41,42 +38,19 @@ def _status(status: str, monkeypatch) -> None:
     )
 
 
-def test_available_engine_hides_install_button(panel, monkeypatch):
+def test_available_engine_shows_available(panel, monkeypatch):
     _status("available", monkeypatch)
     panel._vad_tab._refresh_engine_status()
-    # The label now carries hardware/runtime context after the status text.
     assert panel._vad_tab._engine_status_label.text().startswith(t("engine_status_available"))
-    assert panel._vad_tab._engine_install_btn.isHidden()
 
 
-def test_needs_extras_shows_install_button(panel, monkeypatch):
+def test_needs_extras_maps_to_available(panel, monkeypatch):
+    # Full-install model: needs-extras maps to available because the engine deps
+    # live in the main environment — there is no separate install step, so the
+    # old "install button + GB size hint" is gone.
     _status("needs-extras", monkeypatch)
     panel._vad_tab._refresh_engine_status()
-    assert not panel._vad_tab._engine_install_btn.isHidden()
-    assert panel._vad_tab._engine_install_btn.isEnabled()
-    assert "GB" in panel._vad_tab._engine_status_label.text()
-
-
-def test_frozen_needs_extras_enables_runtime_install(panel, monkeypatch):
-    """SelfServe P1-B5: the frozen disabled-button placeholder is gone —
-    frozen builds install the recommended runtime variant instead."""
-    _status("needs-extras", monkeypatch)
-    monkeypatch.setattr(sys, "frozen", True, raising=False)
-    panel._vad_tab._refresh_engine_status()
-    assert panel._vad_tab._engine_install_btn.isEnabled()
-    assert panel._vad_tab._engine_install_btn.toolTip() == ""
-    assert (
-        "runtime" in panel._vad_tab._engine_install_btn.text().lower()
-        or "运行时" in panel._vad_tab._engine_install_btn.text()
-    )
-
-
-def test_install_requires_uv(panel, monkeypatch):
-    monkeypatch.setattr("shutil.which", lambda _name: None)
-    warned = []
-    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: warned.append(a)))
-    panel._vad_tab._install_engine_deps()
-    assert warned, "no uv -> user-facing warning expected"
+    assert panel._vad_tab._engine_status_label.text().startswith(t("engine_status_available"))
 
 
 def test_sensevoice_onnx_needs_model_shows_honest_copy(panel, monkeypatch):

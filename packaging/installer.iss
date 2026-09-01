@@ -10,13 +10,9 @@
 ; never touched by installs/updates — data never leaves the install dir.
 ; Uninstall keeps data\ unless the opt-in task is checked.
 ;
-; tools\uv.exe ships with the app (SelfServe P1-B2): frozen engine installs
-; resolve the embedded uv at {app}\tools\uv.exe (core/uv_runner.uv_binary).
-; Engines are on-demand — the installer bundles the app + embedded toolchain
-; only. The user installs, opens the app, and the runtime engine install
-; (core/uv_runner.install_variant) pulls the pinned variant requirements into
-; {app}\data\engines on their hardware/network. No preload / offline engine
-; component.
+; Full-install model (2026-09-01): engine dependencies ship with the app via
+; pyappify, so there is no embedded uv / bundled CPython / runtime engine
+; install — the installer ships the app onedir only.
 
 #define MyAppName "LiveTranslate"
 #ifndef MyAppVersion
@@ -52,10 +48,6 @@ Name: "deletedata"; Description: "同时删除全部用户数据（设置、模�
 
 [Files]
 Source: "..\dist\LiveTranslate\*"; DestDir: "{app}\app"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\dist\tools\uv.exe"; DestDir: "{app}\tools"; Flags: ignoreversion
-; Bundled CPython (SelfServe P1-B2): the runtime engine installer always uses
-; this concrete interpreter — never discovers one on the user machine.
-Source: "..\dist\tools\python\*"; DestDir: "{app}\tools\python"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\app\{#MyAppExeName}"

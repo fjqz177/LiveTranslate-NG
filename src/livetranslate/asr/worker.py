@@ -109,7 +109,7 @@ _ENGINE_FACTORIES = {
 
 # Test seam for process-level ASRClient tests (tests/asr/test_client_process.py):
 # the variable names a "module:factory" the worker imports AFTER the
-# pythonpaths injection, letting tests spawn a real worker with a fake
+# base env import, letting tests spawn a real worker with a fake
 # engine (base CI has no real engine deps). Never set in production.
 _TEST_FACTORY_ENV = "LIVETRANSLATE_TEST_ENGINE_FACTORY"
 
@@ -209,12 +209,6 @@ def _release_gpu_memory():
 
 def worker_main(conn, config: dict):
     _setup_logging()
-    # Engine-venv injection (SelfServe P1-B3): the frozen bundle carries no
-    # engine deps, so the worker prepends the active variant's site-packages
-    # before any engine factory import. GUI-side code only ever passes the
-    # paths — it never loads the engines (architecture guard).
-    for path in config.get("pythonpaths") or []:
-        sys.path.insert(0, str(path))
     engine = None
     try:
         log.info(

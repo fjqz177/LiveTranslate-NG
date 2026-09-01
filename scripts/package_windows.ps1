@@ -1,23 +1,18 @@
 # LiveTranslate Windows one-command packaging (SelfServe P0-A1).
 #
 # Runs the full release chain on a clean machine:
-#   1. sync dev tools           6. locate Inno Setup (ISCC)
-#   2. variant requirements    7. compile setup.exe
-#   3. main app spec           8. frozen --smoke
-#   4. bundle tools\uv.exe     9. artifact list + sha256
-#   5. bundle tools\python
+#   1. sync dev tools            4. compile setup.exe
+#   2. main app spec             5. frozen --smoke
+#   3. locate Inno Setup (ISCC)  6. artifact list + sha256
 #
 # Usage:  pwsh -File scripts/package_windows.ps1 [-Version 0.1.0] [-SkipSmoke] [-SetupOnly]
 # The same script runs in CI (release.yml) — no divergence between local and CI.
 #
-# Engines ship on-demand — the single installer bundles the app + embedded
-# toolchain ONLY (base deps, tools\uv.exe, tools\python). The user installs,
-# opens the app, and the runtime engine install (core/uv_runner.install_variant)
-# pulls the pinned variant requirements (runtime/requirements/*.txt, generated
-# in step 2) into data\engines on their hardware/network. No offline/preload
-# component, no portable zip / sidecar.
-# -SetupOnly builds ONLY the installer: sync → requirements → main spec →
-#   uv.exe → iscc (skips smoke).
+# Full-install model (2026-09-01): engine dependencies (torch / faster-whisper /
+# funasr) ship with the app via pyappify, so there is no embedded uv, no bundled
+# CPython and no runtime/on-demand engine install — the installer bundles the app
+# onedir only. No offline/preload component, no portable zip / sidecar.
+# -SetupOnly builds ONLY the installer: sync → main spec → iscc (skips smoke).
 
 param(
     [string]$Version = "",
@@ -71,10 +66,7 @@ trap {
 # so the developer's engine extras are never pruned. Requires an existing dev
 # environment (uv sync --group dev) with pyinstaller available.
 if ($QuickOnedir) {
-    # The spec bundles runtime/requirements as datas; ensure the anchor dir
-    # exists so a clean checkout (never full-packaged) still builds.
-    $null = New-Item -ItemType Directory -Force "$Root\runtime\requirements"
-    Write-Host "[quick] building onedir only (skips variant requirements / Inno / smoke)" -ForegroundColor Cyan
+    Write-Host "[quick] building onedir only (skips Inno / smoke)" -ForegroundColor Cyan
     & uv run pyinstaller packaging/livetranslate.spec --noconfirm
     if ($LASTEXITCODE -ne 0) { throw "quick onedir bundled spec failed" }
     Write-Host "== quick onedir ready: dist\LiveTranslate\ ==" -ForegroundColor Green
@@ -82,77 +74,17 @@ if ($QuickOnedir) {
 }
 
 # --- 1. dev tools -----------------------------------------------------------
-Write-Host "[1/9] uv sync (dev group)" -ForegroundColor Cyan
+Write-Host "[1/6] uv sync (dev group)" -ForegroundColor Cyan
 uv sync --locked --group dev
 if ($LASTEXITCODE -ne 0) { throw "uv sync failed" }
 
-# --- 2. variant requirements (embedded uv engine installs, P1-B2) -----------
-# The frozen bundle ships the pinned variant requirements with it (spec datas
-# runtime/requirements -> collect into _MEIPASS). Regenerate them BEFORE the
-# main spec so they always land in the bundle; the runtime engine install
-# (core/uv_runner.install_variant) reads these on the user machine and never
-# re-resolves. Per-variant failures are soft (skipped), not fatal — the
-# manager only offers variants whose requirements file exists.
-Write-Host "[2/9] generate variant requirements (cpu, cu126)" -ForegroundColor Cyan
-uv run python scripts/build_runtime_variants.py
-if ($LASTEXITCODE -ne 0) { throw "build_runtime_variants failed" }
-
-# --- 3. PyInstaller main onedir ---------------------------------------------
-Write-Host "[3/9] build main app onedir" -ForegroundColor Cyan
+# --- 2. PyInstaller main onedir ---------------------------------------------
+Write-Host "[2/6] build main app onedir" -ForegroundColor Cyan
 uv run pyinstaller packaging/livetranslate.spec --noconfirm
 if ($LASTEXITCODE -ne 0) { throw "main spec failed" }
 
-# --- 4. bundled uv (engine runtime installer, SelfServe P1-B2) --------------
-# Frozen builds install engine variants with the embedded uv; it must ship as
-# <install root>\tools\uv.exe (the onedir and Inno install both resolve it
-# there via core/uv_runner.uv_binary()).
-Write-Host "[4/9] bundle tools\uv.exe" -ForegroundColor Cyan
-$toolsDir = Join-Path $Root "dist\tools"
-$null = New-Item -ItemType Directory -Force $toolsDir
-$uvExe = Join-Path $toolsDir "uv.exe"
-if (-not (Test-Path $uvExe)) {
-    # Prefer the dev machine's own uv (version-identical with the toolchain,
-    # offline); fall back to a pinned download (CI path). Keep the pinned
-    # version in sync with .github/workflows/release.yml.
-    $localUv = Get-Command uv -ErrorAction SilentlyContinue
-    if ($localUv -and (Test-Path $localUv.Source)) {
-        Write-Host "  copying local uv $((& $localUv.Source --version) -join ' ')..." -ForegroundColor Yellow
-        Copy-Item $localUv.Source $uvExe
-    } else {
-        $uvVersion = "0.12.5"
-        Write-Host "  downloading uv $uvVersion (pinned)..." -ForegroundColor Yellow
-        $uvZip = Join-Path $toolsDir "uv.zip"
-        $uvTmp = Join-Path $toolsDir "uv-tmp"
-        Invoke-WebRequest -Uri "https://github.com/astral-sh/uv/releases/download/$uvVersion/uv-x86_64-pc-windows-msvc.zip" -OutFile $uvZip
-        if (Test-Path $uvTmp) { Remove-Item $uvTmp -Recurse -Force }
-        Expand-Archive -Path $uvZip -DestinationPath $uvTmp
-        Move-Item (Join-Path $uvTmp "uv.exe") $uvExe -Force
-        Remove-Item $uvZip -Force
-        Remove-Item $uvTmp -Recurse -Force
-    }
-}
-& $uvExe --version
-
-# --- 5. bundled CPython (uv's declared interpreter, SelfServe P1-B2) ---------
-# The frozen app ships tools\python\python.exe and uv venv always uses this
-# concrete path — the runtime never discovers/downloads a Python on the user
-# machine (eliminates managed-install discovery, version-alias junction trust
-# / os error 448 and no-local-python failures). Source: the uv-managed
-# CPython 3.12 that `uv sync` (step 1) just ensured exists; copy the REAL
-# versioned dir, never the alias junction.
-Write-Host "[5/9] bundle tools\python (uv-managed CPython 3.12)" -ForegroundColor Cyan
-$pyRoot = Join-Path $env:APPDATA "uv\python"
-$pyDir = Get-ChildItem $pyRoot -Directory -Filter "cpython-3.12.*-windows-x86_64-none" -ErrorAction SilentlyContinue |
-    Sort-Object Name -Descending | Select-Object -First 1
-if (-not $pyDir) { throw "uv-managed CPython 3.12 not found under $pyRoot (step 1 sync should have installed it)" }
-$pyTarget = Join-Path $toolsDir "python"
-if (Test-Path $pyTarget) { Remove-Item $pyTarget -Recurse -Force }
-Copy-Item $pyDir.FullName $pyTarget -Recurse
-if (-not (Test-Path (Join-Path $pyTarget "python.exe"))) { throw "bundled python.exe missing after copy" }
-& (Join-Path $pyTarget "python.exe") --version
-
-# --- 6. Inno Setup compiler -------------------------------------------------
-Write-Host "[6/9] locate Inno Setup (ISCC)" -ForegroundColor Cyan
+# --- 3. Inno Setup compiler -------------------------------------------------
+Write-Host "[3/6] locate Inno Setup (ISCC)" -ForegroundColor Cyan
 # Keep one canonical string path: Get-Command yields ApplicationInfo(.Source)
 # while the candidate scan yields plain strings/FileInfo — mixing them broke
 # .Source access (empty on FileInfo).
@@ -217,22 +149,22 @@ if (-not (Test-Path $islPath)) {
     if (-not $ok) { throw "ChineseSimplified.isl download failed — fetch it manually or drop the chinesesimplified language from installer.iss" }
 }
 
-# --- 7. Inno installer ------------------------------------------------------
-Write-Host "[7/9] compile setup.exe" -ForegroundColor Cyan
+# --- 4. Inno installer ------------------------------------------------------
+Write-Host "[4/6] compile setup.exe" -ForegroundColor Cyan
 & $isccExe "/DMyAppVersion=$Version" "packaging/installer.iss"
 if ($LASTEXITCODE -ne 0) { throw "iscc failed" }
 
-# --- 8. frozen smoke ---------------------------------------------------------
+# --- 5. frozen smoke ---------------------------------------------------------
 if (-not $SkipSmoke -and -not $SetupOnly) {
-    Write-Host "[8/9] frozen smoke (offscreen, auto-quit)" -ForegroundColor Cyan
+    Write-Host "[5/6] frozen smoke (offscreen, auto-quit)" -ForegroundColor Cyan
     & "dist\LiveTranslate\LiveTranslate.exe" --smoke
     if ($LASTEXITCODE -ne 0) { throw "--smoke failed (exit $LASTEXITCODE)" }
 } else {
-    Write-Host "[8/9] smoke skipped" -ForegroundColor Yellow
+    Write-Host "[5/6] smoke skipped" -ForegroundColor Yellow
 }
 
-# --- 9. artifact list + sha256 -------------------------------------------------
-Write-Host "[9/9] artifacts" -ForegroundColor Cyan
+# --- 6. artifact list + sha256 -------------------------------------------------
+Write-Host "[6/6] artifacts" -ForegroundColor Cyan
 Get-ChildItem "dist" -File |
     Where-Object { $_.Name -notmatch "\.sha256$" } |
     ForEach-Object {

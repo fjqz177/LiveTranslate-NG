@@ -4,18 +4,16 @@ Extracted from ``livetranslate.app``'s ``_switch_asr_engine`` so the
 engine-normalize / device / hub / model-choice / signature / display_name /
 worker_config / target_state decision can be unit-tested without the Qt
 dialog + QTimer + rollback modal skeleton (which stays in the composition
-root). Qt-free; the only collaborators it reads are ``modeling.manager``,
-``core.engine_runtime`` and ``asr.availability``.
+root). Qt-free; the only collaborators it reads are ``modeling.manager`` and
+``asr.availability``.
 """
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 from livetranslate.asr.availability import sensevoice_onnx_model_present
-from livetranslate.core import engine_runtime
 from livetranslate.modeling.manager import (
     ASR_DISPLAY_NAMES,
     MODELS_DIR,
@@ -53,10 +51,6 @@ class WorkerSwitchPlan:
     cached: bool
     sensevoice_missing: bool = False
     already_ready: bool = False
-    # Frozen + venv-backed engine without an installed runtime variant: the
-    # engine's python deps aren't there, so a model download would be wasted —
-    # the caller must install the runtime FIRST (user report, 2026-09-01).
-    runtime_missing: bool = False
 
 
 def build_worker_config(config, settings, ctl, engine_type: str) -> WorkerSwitchPlan:
@@ -66,8 +60,7 @@ def build_worker_config(config, settings, ctl, engine_type: str) -> WorkerSwitch
     engine normalize (via ``modeling.manager``), device / hub / download_proxy
     defaults, the whisper-vs-funasr model choice, remote url|token identity,
     signature, display_name, ``worker_config`` (conditional pad_seconds +
-    download_root + pythonpaths through ``active_variant`` /
-    ``variant_site_packages``) and ``target_state``. The Qt modal dialog, the
+    download_root) and ``target_state``. The Qt modal dialog, the
     QTimer poll and the rollback skeleton are *not* part of this function.
     """
     engine_type, funasr_model = normalize_asr_engine_selection(
@@ -117,14 +110,6 @@ def build_worker_config(config, settings, ctl, engine_type: str) -> WorkerSwitch
     already_ready = ctl.is_ready_with_signature(signature)
 
     cached = is_asr_cached(engine_type, cache_model_key, hub)
-    # Frozen + venv-backed engine with no installed variant: deps not yet
-    # present, so a model download would be wasted. The caller must install the
-    # runtime variant first, then re-plan (deps ready -> model download OK).
-    runtime_missing = (
-        engine_type in engine_runtime.VENV_BACKED_ENGINES
-        and getattr(sys, "frozen", False)
-        and engine_runtime.active_variant() is None
-    )
 
     display_name = ASR_DISPLAY_NAMES.get(engine_type, engine_type)
     if engine_type == "whisper":
@@ -161,15 +146,6 @@ def build_worker_config(config, settings, ctl, engine_type: str) -> WorkerSwitch
         "remote_asr_url": remote_asr_url,
         "remote_asr_token": remote_asr_token,
     }
-    # Engine-venv paths (SelfServe P1-B3): engines that live outside the frozen
-    # bundle (whisper/funasr/anime-whisper) load from the active variant's
-    # site-packages; base-native engines (sensevoice-onnx, remote) need none.
-    pythonpaths: list[str] = []
-    if engine_type in engine_runtime.VENV_BACKED_ENGINES:
-        active = engine_runtime.active_variant()
-        if active:
-            pythonpaths = [str(engine_runtime.variant_site_packages(active))]
-    worker_config["pythonpaths"] = pythonpaths
 
     target_state = {
         "type": engine_type,
@@ -196,5 +172,4 @@ def build_worker_config(config, settings, ctl, engine_type: str) -> WorkerSwitch
         cached=cached,
         sensevoice_missing=sensevoice_missing,
         already_ready=already_ready,
-        runtime_missing=runtime_missing,
     )

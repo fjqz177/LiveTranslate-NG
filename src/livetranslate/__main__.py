@@ -38,8 +38,8 @@ from livetranslate.modeling.manager import apply_cache_env
 apply_cache_env()
 
 if sys.platform == "win32":
-    # torch must precede PyQt6 on Windows when installed (DLL order); frozen
-    # base builds ship engines as packs (ADR-006), so torch is optional.
+    # torch must precede PyQt6 on Windows (DLL order); engine deps ship with
+    # the base install, so torch is always importable.
     try:
         import torch
     except ImportError:

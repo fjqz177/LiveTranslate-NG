@@ -103,7 +103,7 @@ def test_worker_ready_exactly_matches_factories():
         )
 
 
-# ── 4. extras / probe / pyproject closure ───────────────────────────────────
+# ── 4. extras / pyproject closure ──────────────────────────────────────────
 
 
 def test_registry_extras_exist_in_pyproject():
@@ -111,16 +111,6 @@ def test_registry_extras_exist_in_pyproject():
     for eid, spec in ENGINE_REGISTRY.items():
         for extra in spec.extras:
             assert extra in optional, f"{eid} declares {extra!r} missing from pyproject"
-
-
-def test_probe_map_keys_exist_and_have_no_phantom():
-    optional = _project_optional_deps()
-    for extra in availability.EXTRAS_PROBE_MAP:
-        assert extra in optional, f"probe references {extra!r} that no longer exists"
-    # M-MATRIX: engine-nano was a phantom standalone ENGINE — its probe/extra
-    # must be gone (Nanos live as MODELS under the legacy "funasr" engine).
-    assert "engine-nano" not in availability.EXTRAS_PROBE_MAP
-    assert "engine-nano" not in optional
 
 
 # ── 5. sensevoice-onnx: torch-free + gated by the ONNX artifact ──────────────
@@ -156,7 +146,6 @@ def test_sensevoice_onnx_gated_by_onnx_artifact(tmp_path):
 
 def test_engine_status_sensevoice_onnx_uses_model_gate(monkeypatch):
     monkeypatch.setattr(availability, "sensevoice_onnx_model_present", lambda: False)
-    monkeypatch.setattr(availability, "extras_installed", lambda _m: True)
     assert availability.engine_status("sensevoice-onnx", "win32") == "needs-model"
 
 
