@@ -123,7 +123,10 @@ jobs:
           # byte-identical (mirrors of the same wheels). bash redirect gives
           # LF / no-BOM output that diff's cleanly against the committed LF files
           # (Out-File -Encoding utf8 adds a BOM that breaks `^#` filtering).
-          uv export --no-dev --no-emit-project --default-index "$LT_REQUIREMENTS_PYPI_INDEX" --index "pytorch=$LT_REQUIREMENTS_PYTORCH_INDEX" --index-strategy unsafe-best-match --extra engine-funasr --extra engine-whisper > "$RUNNER_TEMP/cpu.txt"
+          # CPU profile: torch/torchaudio resolve from PyPI (the CPU build), same
+          # as build_full_requirements.py — NOT the cu126 index (which yields a
+          # different wheel/hash and false-positive drift).
+          uv export --no-dev --no-emit-project --default-index "$LT_REQUIREMENTS_PYPI_INDEX" --index "pytorch=$LT_REQUIREMENTS_PYPI_INDEX" --index-strategy unsafe-best-match --extra engine-funasr --extra engine-whisper > "$RUNNER_TEMP/cpu.txt"
           uv export --no-dev --no-emit-project --default-index "$LT_REQUIREMENTS_PYPI_INDEX" --index "pytorch=$LT_REQUIREMENTS_PYTORCH_INDEX" --index-strategy unsafe-best-match --extra engine-funasr --extra engine-whisper --extra engine-cuda > "$RUNNER_TEMP/gpu.txt"
           for pair in cpu:requirements-full-cpu.txt gpu:requirements-full-gpu.txt; do
             f="${pair%%:*}"; comm="${pair#*:}"
