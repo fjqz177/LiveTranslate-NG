@@ -6,7 +6,6 @@ build-backend = "hatchling.build"
 name = "livetranslate"
 version = "0.1.0"
 description = "Real-time audio translation for Windows video players"
-readme = "README.md"
 requires-python = ">=3.10,<3.13"
 dependencies = [
     # Core — deliberately torch-free: VAD (Phase 2) and SenseVoice (Phase 5)
@@ -52,12 +51,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# The shipped engine-venv variant requirements (runtime/requirements/*.txt,
-# installed by the embedded uv on end-user machines) are exported from this
-# extras table with `uv export --no-dev` (scripts/build_runtime_variants.py):
-# ONLY the engine extras + their transitive closure — the dev toolchain is
-# excluded. This table is therefore the single source of truth for what an
-# engine venv can contain (M-VENV, guarded by tests/test_runtime_requirements.py).
+# Engine dependency groups exported into the install-time requirements by
+# scripts/build_full_requirements.py (`uv export --no-dev`): ONLY the engine
+# extras + transitive closure — the dev toolchain is excluded. This table is
+# the single source of truth for what each shipped variant (cpu/gpu) installs.
 # ASR engine groups: only the worker process loads these backends
 # (tests/test_architecture.py forbids GUI-side imports).
 engine-whisper = ["faster-whisper>=1.0,<2"]
@@ -107,7 +104,13 @@ livetranslate-check = "livetranslate.devtools:check_main"
 livetranslate-package = "livetranslate.devtools:package_main"
 
 [dependency-groups]
-dev = ["ruff>=0.9.0", "pytest>=8.0.0", "pytest-qt>=4.0", "mypy>=1.15", "pre-commit>=4.0", "onnx>=1.16", "silero-vad>=5.0,<7", "pillow>=10.0", "pyinstaller>=6.0"]
+# silero-vad is intentionally NOT here: the >=5.0 wheel hard-depends
+# torch+torchaudio, which would drag ~2.4GiB into every `uv sync` (and is what
+# kept locking the dev environment). It is only needed when exporting the
+# Silero ONNX artifact for packaging (scripts/export_silero_vad.py) — install it
+# on demand there. No test imports it; engines/VAD deps load at runtime, not in
+# the regression suite, so the baseline sync stays torch-free.
+dev = ["ruff>=0.9.0", "pytest>=8.0.0", "pytest-qt>=4.0", "mypy>=1.15", "pre-commit>=4.0", "onnx>=1.16", "pillow>=10.0", "pyinstaller>=6.0"]
 
 [tool.uv]
 managed = true
@@ -118,17 +121,22 @@ required-version = ">=0.9.0"
 [tool.uv.workspace]
 members = ["src/livetranslate_server"]
 
-# Pin the default index explicitly so a developer's user-level uv.toml mirror
-# (e.g. Tsinghua) cannot leak its registry URL into the committed uv.lock.
+# Pin the default index to a mainland mirror so `uv sync` / `uv run` resolve
+# fast and reliably for the project's China-based users (the packaged app's
+# pyappify pip_args already point at Tsinghua). Keeping the URL explicit makes
+# the committed uv.lock self-contained; swap the name's url to self-host if the
+# mirror becomes unreachable.
 [[tool.uv.index]]
 name = "pypi"
-url = "https://pypi.org/simple"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
 
-# PyTorch publishes CUDA-variant wheels on its own index, not PyPI.
+# PyTorch publishes CUDA-variant wheels on its own index, not PyPI. Use the
+# NJU mirror (reachable from mainland networks) instead of download.pytorch.org
+# which is slow there.
 [[tool.uv.index]]
 name = "pytorch"
-url = "https://download.pytorch.org/whl/cu126"
+url = "https://mirror.nju.edu.cn/pytorch/whl/cu126"
 explicit = true
 
 [tool.uv.sources]
