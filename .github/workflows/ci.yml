@@ -20,14 +20,14 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       # Full-install model (2026-09-01): engines ship with the app as base deps,
-      # so no separate --extra engine-* flags. CPU torch keeps the CI cache
-      # small; unsafe-best-match lets non-torch packages resolve from PyPI while
-      # torch is routed to the CPU PyTorch index via [tool.uv.sources].
-      # GitHub-hosted runners are outside mainland China, so the default index
-      # is pinned to the official PyPI (not the Tsinghua mirror in pyproject)
-      # to keep sync fast/reliable there.
-      - name: Sync environment (CPU torch)
-        run: uv sync --locked --default-index https://pypi.org/simple --index "pytorch=https://download.pytorch.org/whl/cpu" --index-strategy unsafe-best-match
+      # so no separate --extra engine-* flags (they are optional-dependencies,
+      # installed on the END-USER machine by pyappify, not in the dev env).
+      # NOTE: no index overrides anywhere here — uv.lock is pinned against the
+      # Tsinghua/NJU mirrors, and `--locked` fast-checks the lock without network
+      # but re-resolves (and can fail with "needs update") if any index is
+      # overridden. Install straight from the lock's own index.
+      - name: Sync environment
+        run: uv sync --locked
 
       # Authoritative gate — the SAME command a human/agent runs locally.
       # It covers lock --check + ruff + format + mypy + pytest, so CI and the

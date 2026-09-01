@@ -27,9 +27,10 @@ env:
   # are configured (plan §7.8: first SignPath run needs a manual project +
   # approval). Default 'false' so a tag push builds an unsigned setup.exe first.
   SIGN_BUILD: "false"
-  # GitHub-hosted runners are outside mainland China: override the Tsinghua/NJU
-  # mirrors with the official indexes for sync/export there. Local dev keeps the
-  # mirrors (pyproject), so the committed requirements pins stay identical.
+  # Official indexes for the export-only drift gate. GitHub-hosted runners are
+  # outside mainland China, so the export here resolves against PyPI official /
+  # PyTorch official; the committed requirements (generated locally against the
+  # Tsinghua/NJU mirrors) pin the SAME wheels, so the diff must stay empty.
   LT_REQUIREMENTS_PYPI_INDEX: "https://pypi.org/simple"
   LT_REQUIREMENTS_PYTORCH_INDEX: "https://download.pytorch.org/whl/cu126"
 
@@ -63,10 +64,13 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
-      # Dev/test environment with CPU torch (cheap) — the full engine set is
-      # installed by pyappify on the END-USER machine, not here.
-      - name: Sync environment (CPU torch)
-        run: uv sync --locked --default-index https://pypi.org/simple --index "pytorch=https://download.pytorch.org/whl/cpu" --index-strategy unsafe-best-match
+      # Dev/test environment. NOTE: no index overrides here. uv.lock was created
+      # against the Tsinghua/NJU mirrors, and `--locked` fast-checks the lock
+      # (no network) but re-resolves if any index is overridden — so we install
+      # straight from the lock's own index. Base deps are torch-free (engine-*
+      # are optional-dependencies), so CPU torch never enters the dev env.
+      - name: Sync environment
+        run: uv sync --locked
 
       # Authoritative quality gate (same command a human runs locally).
       - name: Quality gate
@@ -86,8 +90,6 @@ jobs:
     name: 2 · Build & sign
     needs: validate
     runs-on: windows-latest
-    outputs:
-      per_exe_slug: ${{ steps.meta.outputs.per_exe_slug }}
     steps:
       - name: Configure runner
         shell: pwsh
@@ -105,22 +107,25 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
-      - name: Sync environment (CPU torch)
-        run: uv sync --locked --default-index https://pypi.org/simple --index "pytorch=https://download.pytorch.org/whl/cpu" --index-strategy unsafe-best-match
-
       # Drift gate: regenerate the pinned install requirements with the official
       # indexes and diff the committed ones. Mirrors are mirrors of the same
-      # wheels, so the pins must match byte-for-byte; a diff means the committed
-      # requirements drifted from pyproject (plan §4.7).
+      # wheels so the pins must match byte-for-byte; a diff means the committed
+      # requirements drifted from pyproject (plan §4.7). `--index-strategy
+      # unsafe-best-match` is required because the cu126 PyTorch mirror also
+      # carries old non-torch packages (e.g. idna==3.4) that would otherwise
+      # win by index order and break openai.
       - name: Drift gate (requirements-full-*.txt == pyproject extras)
         shell: pwsh
         run: |
-          uv export --no-dev --no-emit-project --default-index $env:LT_REQUIREMENTS_PYPI_INDEX --index "pytorch=$env:LT_REQUIREMENTS_PYTORCH_INDEX" --extra engine-funasr --extra engine-whisper | Out-File -Encoding utf8 $env:RUNNER_TEMP\cpu.txt
-          uv export --no-dev --no-emit-project --default-index $env:LT_REQUIREMENTS_PYPI_INDEX --index "pytorch=$env:LT_REQUIREMENTS_PYTORCH_INDEX" --extra engine-funasr --extra engine-whisper --extra engine-cuda | Out-File -Encoding utf8 $env:RUNNER_TEMP\gpu.txt
+          $pypi = $env:LT_REQUIREMENTS_PYPI_INDEX
+          $pt = $env:LT_REQUIREMENTS_PYTORCH_INDEX
+          uv export --no-dev --no-emit-project --default-index $pypi --index "pytorch=$pt" --index-strategy unsafe-best-match --extra engine-funasr --extra engine-whisper | Out-File -Encoding utf8 $env:RUNNER_TEMP\cpu.txt
+          uv export --no-dev --no-emit-project --default-index $pypi --index "pytorch=$pt" --index-strategy unsafe-best-match --extra engine-funasr --extra engine-whisper --extra engine-cuda | Out-File -Encoding utf8 $env:RUNNER_TEMP\gpu.txt
           foreach ($pair in @(@("cpu","requirements-full-cpu.txt"),@("gpu","requirements-full-gpu.txt"))) {
             $gen = "$env:RUNNER_TEMP\$($pair[0]).txt"
-            if (-not (Compare-Object (Get-Content $gen) (Get-Content $pair[1]) -SyncWindow 0)) {}
-            else { throw "requirements would drift: $($pair[1]) no longer matches pyproject (re-run scripts/build_full_requirements.py locally and commit)" }
+            if (Compare-Object (Get-Content $gen) (Get-Content $pair[1]) -SyncWindow 0) {
+              throw "requirements would drift: $($pair[1]) no longer matches pyproject (re-run scripts/build_full_requirements.py locally and commit)"
+            }
           }
           Write-Host "Drift gate OK: requirements-full-{cpu,gpu}.txt match pyproject"
 
