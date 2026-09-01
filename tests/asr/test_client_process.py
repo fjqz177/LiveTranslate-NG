@@ -1,13 +1,12 @@
 """Process-level ASRClient tests (P3): real spawn + Pipe round-trips.
 
 The worker child re-imports everything fresh (spawn context), so the fake
-engine is injected two ways: the fake module is placed on PYTHONPATH (inherited
-by the spawned child) and the factory override is selected with the
+engine is injected two ways: the fake module is prepended to sys.path (the
+spawned child inherits it) and the factory override is selected with the
 LIVETRANSLATE_TEST_ENGINE_FACTORY seam. No real engine dependencies are needed.
 Spawns are slow (~1s each on Windows), so the suite stays small.
 """
 
-import os
 import time
 from pathlib import Path
 
@@ -68,13 +67,11 @@ def _client(fake_engine_dir: Path, monkeypatch, request_timeout=10.0, use_seam=T
         monkeypatch.setenv("LIVETRANSLATE_TEST_ENGINE_FACTORY", "fake_echo_engine:make_echo")
     else:
         monkeypatch.delenv("LIVETRANSLATE_TEST_ENGINE_FACTORY", raising=False)
-    # Inject the fake module into the spawn child's PYTHONPATH; the engine
-    # extras live in the main environment now, so the test seam rides the
-    # inherited env instead of a config pythonpaths entry.
-    monkeypatch.setenv(
-        "PYTHONPATH",
-        os.pathsep.join([str(fake_engine_dir), os.environ.get("PYTHONPATH", "")]),
-    )
+    # Inject the fake module into the spawn child's import path. Windows spawn
+    # copies sys.path from the parent at process start (it does NOT re-read
+    # PYTHONPATH), so setenv alone never reaches the child — prepend to sys.path
+    # and let the child inherit it instead.
+    monkeypatch.syspath_prepend(str(fake_engine_dir))
     config = {
         "engine_type": "not-a-real-engine",  # overridden by the test seam
         "device": "cpu",

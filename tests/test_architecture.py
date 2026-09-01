@@ -79,14 +79,22 @@ def _has_import(path: Path, prefix: str) -> bool:
 
 # ── Root whitelist ───────────────────────────────────────────────────────
 
+# The pyappify distribution shim (pyappify.yml main_script: "main.py") is the
+# one legitimate root module: it bootstraps LIVETRANSLATE_PORTABLE_DIR and
+# inserts src/ into sys.path before importing livetranslate. Fixed-name
+# whitelist so the guard keeps its teeth against any other stray .py.
+_ROOT_ENTRY_SHIMS = {"main.py"}
+
 
 def test_root_is_module_free():
     # The only entry point is src/livetranslate/__main__.py; the repository
     # root must contain no importable modules at all.
-    root_modules = sorted(p.name for p in PROJECT_ROOT.glob("*.py"))
-    assert root_modules == [], (
-        "the repository root must contain no .py modules; "
-        "new modules belong inside src/livetranslate/"
+    root_modules = {p.name for p in PROJECT_ROOT.glob("*.py")}
+    extra = root_modules - _ROOT_ENTRY_SHIMS
+    assert not extra, (
+        "the repository root must contain no .py modules except the "
+        f"pyappify shim ({', '.join(sorted(_ROOT_ENTRY_SHIMS))}); "
+        f"found: {sorted(extra)}"
     )
 
 
@@ -201,6 +209,10 @@ def test_engines_stay_behind_the_contract():
         "livetranslate.asr",
         "livetranslate.core.i18n",
         "livetranslate.core.paths",
+        # pure-stdlib cross-cutting helper (redact_text/redact_dict) the engines
+        # call for log-time path/credential redaction — same tier as core.i18n /
+        # core.paths (ARCH-2 contract, updated for a6c0553).
+        "livetranslate.core.privacy",
         "livetranslate.modeling",
     )
     offenders = [

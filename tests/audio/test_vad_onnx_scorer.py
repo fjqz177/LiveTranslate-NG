@@ -7,11 +7,16 @@ determinism are verified against the shipped model, not a mock.
 import numpy as np
 import pytest
 
-from livetranslate.audio.vad.scorer import SileroConfidenceScorer
+from livetranslate.audio.vad.scorer import SileroConfidenceScorer, default_onnx_path
 
 
 @pytest.fixture(scope="module")
 def scorer():
+    # The dev baseline is deliberately torch-free (silero-vad not installed and
+    # nothing exports the ONNX artifact into the cache), so the real-model suite
+    # must skip, not error, when the model is absent. The deterministic/mock
+    # path (test_vad_segmenter) still runs everywhere.
+    default_onnx_path().is_file() or pytest.skip("Silero ONNX artifact not present")
     return SileroConfidenceScorer()
 
 

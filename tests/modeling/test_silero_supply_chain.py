@@ -53,15 +53,15 @@ class TestMaskProxyUrl:
 
     def test_userinfo_masked(self):
         assert (
-            manager._mask_proxy_url("http://user:secret@proxy.local:1080")
+            manager.mask_proxy_url("http://user:secret@proxy.local:1080")
             == "http://***@proxy.local:1080"
         )
 
     def test_plain_url_untouched(self):
-        assert manager._mask_proxy_url("http://proxy.local:1080") == "http://proxy.local:1080"
+        assert manager.mask_proxy_url("http://proxy.local:1080") == "http://proxy.local:1080"
 
     def test_no_credentials_untouched(self):
-        assert manager._mask_proxy_url("system") == "system"
+        assert manager.mask_proxy_url("system") == "system"
 
     def test_ssl_relaxation_requires_opt_in(self, monkeypatch, fake_torch, no_silero_pkg):
         install, calls = fake_torch

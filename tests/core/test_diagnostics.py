@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from livetranslate.core.paths import PROJECT_ROOT
 from livetranslate.core.diagnostics import (
     collect_summary,
     redact_dict,
@@ -55,12 +56,14 @@ class TestRuntimePathFolding:
         assert "<user>/..." in out
 
     def test_explicit_data_root_folded(self):
-        out = redact_text(r"models at D:\biancheng\LiveTranslate\models\faster-whisper-small")
+        root = str(PROJECT_ROOT).rstrip("\\/")
+        out = redact_text(f"models at {root}\\models\\faster-whisper-small")
         assert "biancheng" not in out
         assert "<data_root>/..." in out
 
     def test_repo_root_folded_after_data_root(self):
-        out = redact_text(r"D:\biancheng\LiveTranslate\settings.json")
+        root = str(PROJECT_ROOT).rstrip("\\/")
+        out = redact_text(f"{root}\\settings.json")
         assert "biancheng" not in out
         assert "<data_root>/..." in out or "<repo>/..." in out
 
