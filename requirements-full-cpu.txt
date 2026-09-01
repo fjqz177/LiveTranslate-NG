@@ -734,9 +734,9 @@ numpy==2.5.2 ; python_full_version >= '3.12' \
     #   torch-complex
     #   transformers
     #   umap-learn
-nvidia-cublas==13.1.0.3 ; sys_platform == 'linux' \
-    --hash=sha256:c86fc7f7ae36d7528288c5d88098edcb7b02c633d262e7ddbb86b0ad91be5df2 \
-    --hash=sha256:ee8722c1f0145ab246bccb9e452153b5e0515fd094c3678df50b2a0888b8b171
+nvidia-cublas==13.6.1.10 ; sys_platform == 'linux' \
+    --hash=sha256:e05a431062a17cb9b02e2f37e67817b637051ce8fad57b388482c594396ddbb4 \
+    --hash=sha256:feb2ed8a1e211bc5774413efc0f1a08c4d5269b56f68b4ac6fe5408e57f7dc1c
     # via
     #   cuda-toolkit
     #   nvidia-cudnn-cu13
