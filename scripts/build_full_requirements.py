@@ -21,15 +21,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # --no-dev:  exclude the dev toolchain. --no-emit-project: excluded the project
 # package itself (the app code runs from source via main.py, not pip-installed).
-# --python-platform windows: keep the lock platform-stable so non-Windows CI
-# does not silently pick a different wheel set.
+# uv export no longer accepts `--python-platform` (removed in uv 0.12); the
+# export follows the lock's platform resolution. The build/CI runs on Windows,
+# so the current-platform export is exactly the target wheel set.
 _EXPORT = [
     "uv",
     "export",
     "--no-dev",
     "--no-emit-project",
-    "--python-platform",
-    "windows",
 ]
 
 
