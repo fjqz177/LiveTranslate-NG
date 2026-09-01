@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "livetranslate-server"
+version = "0.1.0"
+description = "Remote GPU ASR server for LiveTranslate (faster-whisper over HTTP)"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "faster-whisper>=1.0,<2",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.29.0",
+    "numpy>=2.0",
+]
+
+[project.scripts]
+livetranslate-server = "livetranslate_server.__main__:main"
+
+# Flat layout: pyproject.toml sits INSIDE the package dir (src/livetranslate_server/),
+# which hatchling's src-layout auto-detection cannot find. Pin the package
+# explicitly or the member never builds (uv run --package ... fails with
+# "build_editable ... recurse_selected_project_files").
+[tool.hatch.build.targets.wheel]
+packages = ["."]

@@ -1,0 +1,99 @@
+name: Release
+
+# Plan §5.3: tag push (v*) or manual dispatch builds the single Windows
+# installer, smokes the frozen onedir (offscreen --smoke) and publishes the
+# installer to a GitHub Release. Windows-only; the whole build runs through
+# scripts/package_windows.ps1 (no bash re-implementation).
+#
+# The self-hosted Ed25519 update manifest (latest.json + signature) is gone:
+# the app asks the GitHub releases API for a new version and points the user
+# at this Release's download page, so publishing the setup.exe + sha256 here
+# is the whole contract.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Normalize VERSION (REL-1): tag pushes must carry a semver v-tag
+      # (fail fast otherwise); manual dispatches derive it from pyproject.
+      - name: Resolve version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+              echo "::error::release tag '$VERSION' is not a semver v-tag"
+              exit 1
+            fi
+          else
+            VERSION="v$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)"
+            [ -n "$VERSION" ] || { echo "::error::could not read version from pyproject.toml"; exit 1; }
+            echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          fi
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      # M-VENV drift gate (engine-venv runtime dependency split): this job
+      # re-resolves against the committed uv.lock with network, so it is the
+      # single place that regenerates the shipped variant requirements from a
+      # fresh `uv export --no-dev` and fails the release if they drifted.
+      # Deliberately NOT in scripts/package_windows.ps1 — two checks of the
+      # same invariant is duplication.
+      - name: Drift gate (variant requirements == uv.lock)
+        shell: bash
+        run: |
+          uv run python scripts/build_runtime_variants.py --force
+          git diff --exit-code -- runtime/requirements
+
+      # Single packaging entrypoint: sync → variant requirements → onedir →
+      # tools\{uv,python} → Inno setup.exe → frozen --smoke → sha256. This is
+      # the same script a developer runs locally, so local and CI cannot
+      # diverge.
+      - name: Package (single entrypoint)
+        shell: bash
+        run: pwsh -NoProfile -File scripts/package_windows.ps1 -Version "${VERSION#v}"
+
+      # Emit a traceable record for the G7 release checklist: the smoke result
+      # and the artifact sha256. ps1 already fails the job if frozen --smoke
+      # is not "Smoke OK" (non-zero exit), so reaching here means the frozen
+      # onedir actually boots.
+      - name: Record smoke + artifact hash
+        shell: bash
+        run: |
+          echo "## Windows install artifact" >> "$GITHUB_STEP_SUMMARY"
+          echo "- smoke: Smoke OK (frozen onedir booted)" >> "$GITHUB_STEP_SUMMARY"
+          for f in dist/LiveTranslate-*-setup.exe.sha256; do
+            echo "- $f: \`$(cat "$f")\`" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-win32
+          path: |
+            dist/LiveTranslate-*-setup.exe
+            dist/LiveTranslate-*-setup.exe.sha256
+
+      # Publish the installer to this GitHub Release — the app's update check
+      # (GitHub releases API) surfaces it to the user. No manifest, no signing.
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION }}
+          fail_on_unmatched_files: false
+          files: |
+            dist/LiveTranslate-*-setup.exe
+            dist/LiveTranslate-*-setup.exe.sha256

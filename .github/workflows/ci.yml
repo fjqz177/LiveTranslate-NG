@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    # Windows-only: sync (CPU torch + engine extras) + the full pytest gate.
+    # PyAudioWPatch ships Windows-only wheels, so non-Windows syncs fail.
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      # CPU torch keeps the CI cache small; unsafe-best-match lets non-torch
+      # packages resolve from PyPI while torch is explicitly routed to the
+      # PyTorch index via [tool.uv.sources].
+      - name: Sync environment (CPU torch + engine extras)
+        run: uv sync --extra engine-funasr --extra engine-whisper --locked --index "pytorch=https://download.pytorch.org/whl/cpu" --index-strategy unsafe-best-match
+
+      # Authoritative gate — the SAME command a human/agent runs locally.
+      # It covers lock --check + ruff + format + mypy + pytest, so CI and the
+      # local gate cannot diverge (single implementation, single source of truth).
+      - name: Quality gate
+        run: uv run livetranslate-pr
+
+  smoke-cpu:
+    # Full environment install smoke test (manual trigger).
+    runs-on: windows-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync with CPU PyTorch variant
+        run: uv sync --extra engine-funasr --extra engine-whisper --index "pytorch=https://download.pytorch.org/whl/cpu" --index-strategy unsafe-best-match
+
+      - name: Verify torch imports
+        run: uv run python -c "import torch, torchaudio; print(torch.__version__, torch.cuda.is_available())"

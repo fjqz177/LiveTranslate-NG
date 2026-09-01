@@ -1,0 +1,13 @@
+# Dependabot: weekly updates for the CI toolchain and Python deps.
+# The tight pin policy (tests/test_requirements.py) guards the base set;
+# this keeps the rest of the tree moving.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"

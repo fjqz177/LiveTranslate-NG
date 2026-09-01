@@ -1,0 +1,69 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+.venv/
+models/
+logs/
+transcripts/
+user_settings.json
+
+# Dev-mode unified data root: runtime data lives in the repo by default.
+# Anchored to the repo root on purpose: a bare "engines/" would also match
+# src/livetranslate/asr/engines/ and silently ignore new engine sources.
+/settings.json
+/settings.tmp
+/engines/
+/single-instance.lock
+/portable.ini
+/.update-*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# uv installed via install.bat's pip mirror route (root only — a bare "tools/"
+# would also shadow src/livetranslate/asr/vendor/funasr_nano/tools/, which is
+# tracked vendored source).
+/tools/
+
+# Inno Setup portable toolchain + packaging downloads (scripts/package_windows.ps1)
+.tools/
+
+# Distribution
+dist/
+build/
+release/
+*.egg-info/
+packaging/.update_private.key
+packaging/latest.json
+packaging/latest.json.sig
+# DSH agent runtime state (local only)
+.omo/
+
+# Frozen/unified data root: a frozen build (or --smoke run from the repo root)
+# writes ALL runtime data (settings / models / transcripts / logs / engines) to
+# <repo>/data, same as the in-app <install>/data. Anchored to the repo root to
+# avoid shadowing any source `data/` (none today, but be explicit).
+/data/
+
+# Test coverage artifacts
+.coverage
+coverage.xml
+htmlcov/
+
+# Linux packaging residue (Linux scope removed 2026-08-30)
+/debian/
+
+# runtime/ pins only the variant requirements that ship with the frozen app;
+# anything else dropped here is runtime noise and must not be committed.
+/runtime/*.txt
+!/runtime/requirements/*.txt
+

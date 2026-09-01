@@ -1,0 +1,210 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "livetranslate"
+version = "0.1.0"
+description = "Real-time audio translation for Windows video players"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    # Core — deliberately torch-free: VAD (Phase 2) and SenseVoice (Phase 5)
+    # move to onnxruntime, whisper runs on ctranslate2/whisper.cpp/mlx, so the
+    # base install never pulls a GPU framework.
+    "numpy>=2.2.6",
+    "PyYAML>=6.0",
+    "httpx>=0.28.0",
+    # openai 3.x is the validated baseline; the <4 re-verification note lives
+    # in core/translator.py (make_openai_client, httpx2 shim).
+    "openai>=3.0.0",
+    "psutil>=7.2.2",
+    "pysbd>=0.3.4,<1",  # unmaintained since 2021; block a hypothetical 1.x
+    # SenseVoice-ONNX tokenizer (base): the engine's bpe decode needs it and
+    # it must work offline in the frozen bundle (SelfServe P0-A3 removed the
+    # torchaudio frontend; the tokenizer is the remaining runtime piece).
+    "sentencepiece>=0.2.0",
+    "pydantic>=2.0",
+    "platformdirs>=4.0",
+    # Update manifest verification (plan §4.9) ships inside the frozen app;
+    # packaging parses semver for the same path. Both are pure wheels.
+    "cryptography>=42.0",
+    "packaging>=24.0",
+    # VAD runtime (Phase 2) and the SenseVoice-onnx engine share onnxruntime.
+    # The CPU wheel is the baseline; GPU EPs arrive via engine packs (Phase 5)
+    # so onnxruntime-gpu never has to coexist with the CPU wheel.
+    "onnxruntime>=1.17,<2",
+
+    # Audio capture (Windows WASAPI loopback). Windows-only wheels — do not
+    # expect resolution on non-Windows platforms.
+    "PyAudioWPatch==0.2.12.8; sys_platform == 'win32'",
+
+    # Model hubs
+    # The modelscope / huggingface_hub SDKs are deliberately absent from base:
+    # they drag ~130 MB of transitive deps (transformers, jieba, ...) into the
+    # frozen bundle for a job done by modeling/hub_downloader.py (httpx direct
+    # REST, SelfServe P0-A2). Model downloads use that lightweight client.
+
+    # UI
+    # Qt is API-stable within a major; <7 blocks the Qt 7 transition.
+    # Use ==6.11.0 instead if byte-identical UI behavior is wanted.
+    "PyQt6>=6.5.0,<7",
+]
+
+[project.optional-dependencies]
+# The shipped engine-venv variant requirements (runtime/requirements/*.txt,
+# installed by the embedded uv on end-user machines) are exported from this
+# extras table with `uv export --no-dev` (scripts/build_runtime_variants.py):
+# ONLY the engine extras + their transitive closure — the dev toolchain is
+# excluded. This table is therefore the single source of truth for what an
+# engine venv can contain (M-VENV, guarded by tests/test_runtime_requirements.py).
+# ASR engine groups: only the worker process loads these backends
+# (tests/test_architecture.py forbids GUI-side imports).
+engine-whisper = ["faster-whisper>=1.0,<2"]
+# funasr is pinned exactly: it anchors a large, loosely-constrained transitive
+# subtree (librosa/scipy/transformers/umap-learn/...). Bump it deliberately via
+# `uv lock --upgrade-package funasr` + engine smoke tests. The explicit
+# transitive floors keep resolution off ancient releases.
+engine-funasr = [
+    "funasr==1.4.2",
+    "torch==2.11.0",
+    "torchaudio==2.11.0",
+    "numba>=0.59.0",
+    "transformers>=5.0,<6",
+    "omegaconf>=2.3.0",
+    "kaldiio>=2.18.0",
+    "torch-complex>=0.4.0",
+    "soundfile>=0.12.1",
+    "librosa>=0.10.0,<2",
+    "jaconv>=0.3.0",
+    "jamo>=0.4.1",
+    "hydra-core>=1.3.2",
+    "six>=1.16.0",
+    "sentencepiece>=0.2.0",
+    "tiktoken>=0.7.0",
+]
+# The silero-vad pip package (dev convenience, bundles the ONNX export)
+# is not an engine group: the VAD scorer loads its ONNX model from the
+# package or the model cache at runtime via onnxruntime.
+# CUDA variant (Windows/Linux only — macOS has no CUDA wheels). VAD stays on
+# CPU onnxruntime (microsecond latency, GPU EPs arrive via engine packs).
+engine-cuda = ["torch==2.11.0"]
+# SenseVoice-ONNX is a base-only, torch-free path: the fbank/LFR frontend is
+# the pure-numpy port in asr/fbank.py (SelfServe P0-A3), the neural part runs
+# in onnxruntime (base), and the tokenizer is sentencepiece (base). The group
+# must stay empty (no extra dependency) and exists only so asr/registry extras
+# tables stay uniform; the ONNX model artifact is produced by
+# scripts/export_sensevoice_onnx.py and gated at runtime, not via engine packs.
+# (engine-nano removed as a phantom standalone ENGINE: Nanos live as MODELS
+# under the legacy "funasr" engine, not as a separate ENGINE entry.)
+engine-sensevoice-onnx = []
+
+[project.scripts]
+livetranslate = "livetranslate.__main__:main"
+# uv-only developer entry points (no justfile / no extra tools)
+livetranslate-pr = "livetranslate.devtools:gate_main"
+livetranslate-check = "livetranslate.devtools:check_main"
+livetranslate-package = "livetranslate.devtools:package_main"
+
+[dependency-groups]
+dev = ["ruff>=0.9.0", "pytest>=8.0.0", "pytest-qt>=4.0", "mypy>=1.15", "pre-commit>=4.0", "onnx>=1.16", "silero-vad>=5.0,<7", "pillow>=10.0", "pyinstaller>=6.0"]
+
+[tool.uv]
+managed = true
+package = true
+default-groups = ["dev"]
+required-version = ">=0.9.0"
+
+[tool.uv.workspace]
+members = ["src/livetranslate_server"]
+
+# Pin the default index explicitly so a developer's user-level uv.toml mirror
+# (e.g. Tsinghua) cannot leak its registry URL into the committed uv.lock.
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
+
+# PyTorch publishes CUDA-variant wheels on its own index, not PyPI.
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch" }]
+torchaudio = [{ index = "pytorch" }]
+
+[tool.ruff]
+# funasr_nano/ is third-party code vendored from the FunASR Nano model repo.
+exclude = ["src/livetranslate/asr/vendor/funasr_nano"]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "RUF", "TCH", "ARG", "RET", "PERF"]
+ignore = ["E501"]
+# ARG002/ARG005: Qt slot overrides and signal lambdas carry required signatures
+# by position; renaming or dropping them would obscure the framework contract.
+extend-ignore = ["ARG002", "ARG005"]
+# E402 (module import not at top) is allowed only with an inline `# noqa:
+# E402` where a genuine ordering constraint exists: the entry shim's
+# torch-before-Qt import and modeling/manager's mid-module re-exports.
+[tool.ruff.lint.per-file-ignores]
+"src/livetranslate/__main__.py" = ["E402"]
+"src/livetranslate/modeling/manager.py" = ["E402"]
+
+[tool.pytest.ini_options]
+# Tests import modules from the project root (e.g. `import translator`).
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = [
+    "platform: OS-specific integration tests (real OS only, skipped elsewhere)",
+    "engine: tests requiring optional ASR engine extras",
+]
+[tool.mypy]
+python_version = "3.12"
+strict = true
+exclude = ["src/livetranslate/asr/vendor"]
+
+# Gradual-typing layers (mypy 2.x: untyped defs/calls error by default).
+# The strict heart is core/ + platform/ (both fully annotated); every other
+# layer disables the legacy-code error families until its rewrite Phase
+# re-enables them (tracked in docs/development/重做执行计划.md Phase gates):
+#   Phase 2: audio/ + platform/ system/window   Phase 3-4: backends
+#   Phase 5: asr/registry + engines              Phase 6: ui/
+#   Phase 2-3: app.py (composition root)
+[[tool.mypy.overrides]]
+module = [
+    "livetranslate.app",
+    "livetranslate.__main__",
+    "livetranslate.modeling.*",
+    "livetranslate.audio.*",
+    "livetranslate.asr.*",
+    "livetranslate.ui.*",
+    "livetranslate_server",
+    "livetranslate_server.*",
+]
+disable_error_code = [
+    "no-untyped-def",
+    "no-untyped-call",
+    "no-any-return",
+    "import-untyped",
+    "arg-type",
+    "union-attr",
+    "attr-defined",
+    "assignment",
+    "return-value",
+    "override",
+    "misc",
+    "type-arg",
+    "call-overload",
+    "index",
+    "var-annotated",
+    "untyped-decorator",
+    "import-not-found",
+]
+
+# Third-party modules without stubs.
+[[tool.mypy.overrides]]
+module = ["pyaudiowpatch", "funasr", "faster_whisper", "silero_vad", "modelscope", "pysbd", "jaconv", "jamo", "omegaconf", "kaldiio", "librosa", "hydra", "torch", "torchaudio", "fastapi", "uvicorn"]
+disable_error_code = ["import-untyped", "no-untyped-def", "no-untyped-call"]
