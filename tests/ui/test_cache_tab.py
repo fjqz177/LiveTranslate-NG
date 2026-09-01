@@ -34,17 +34,17 @@ def panel(qapp, tmp_path, monkeypatch):
     p.close()
 
 
-def test_delete_button_follows_selection(panel, qapp):
+def test_delete_button_follows_selection(panel, qtbot):
     tab = panel._cache_tab
     assert not tab._delete_selected_btn.isEnabled()
     tab._cache_entries = [("model-a", "C:/fake/a", 1234)]
     tab._cache_list.addItem("model-a  —  1.2 KB")
     tab._cache_list.setCurrentRow(0)
-    qapp.processEvents()
-    assert tab._delete_selected_btn.isEnabled()
+    # waitUntil polls the condition instead of a single processEvents(), so
+    # the selectionChanged -> enable signal can't race on a slow CI runner.
+    qtbot.waitUntil(lambda: tab._delete_selected_btn.isEnabled(), timeout=2000)
     tab._cache_list.clearSelection()
-    qapp.processEvents()
-    assert not tab._delete_selected_btn.isEnabled()
+    qtbot.waitUntil(lambda: not tab._delete_selected_btn.isEnabled(), timeout=2000)
 
 
 def test_click_empty_space_clears_selection(qapp):
