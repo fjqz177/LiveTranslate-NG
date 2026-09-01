@@ -123,7 +123,13 @@ jobs:
           uv export --no-dev --no-emit-project --default-index $pypi --index "pytorch=$pt" --index-strategy unsafe-best-match --extra engine-funasr --extra engine-whisper --extra engine-cuda | Out-File -Encoding utf8 $env:RUNNER_TEMP\gpu.txt
           foreach ($pair in @(@("cpu","requirements-full-cpu.txt"),@("gpu","requirements-full-gpu.txt"))) {
             $gen = "$env:RUNNER_TEMP\$($pair[0]).txt"
-            if (Compare-Object (Get-Content $gen) (Get-Content $pair[1]) -SyncWindow 0) {
+            # Compare only the pin+hash lines. The `# uv export ...` header
+            # comment records the index URLs, which legitimately differ between
+            # a local mirror build and this CI run — the actual pinned wheels
+            # are byte-identical (mirrors of the same wheels).
+            $genLines = Get-Content $gen | Where-Object { $_ -notmatch '^\s*#' }
+            $commLines = Get-Content $pair[1] | Where-Object { $_ -notmatch '^\s*#' }
+            if (Compare-Object $genLines $commLines -SyncWindow 0) {
               throw "requirements would drift: $($pair[1]) no longer matches pyproject (re-run scripts/build_full_requirements.py locally and commit)"
             }
           }
