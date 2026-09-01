@@ -27,9 +27,12 @@ class VADProcessor:
         min_speech_duration=1.0,
         max_speech_duration=15.0,
         chunk_duration=0.032,
+        silero_optional: bool = False,
     ):
         self.sample_rate = sample_rate
-        self._silero_scorer = SileroConfidenceScorer(threshold=threshold, sample_rate=sample_rate)
+        self._silero_scorer = SileroConfidenceScorer(
+            threshold=threshold, sample_rate=sample_rate, allow_missing=silero_optional
+        )
         self._energy_scorer = EnergyConfidenceScorer()
         self._disabled_scorer = AlwaysSpeechScorer()
         self._scorers = {

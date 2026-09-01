@@ -158,6 +158,9 @@ class LiveTranslateApp:
             min_speech_duration=config["asr"]["min_speech_duration"],
             max_speech_duration=config["asr"]["max_speech_duration"],
             chunk_duration=config["audio"]["chunk_duration"],
+            # smoke gate boots headless against an empty model cache; keep VAD
+            # silent (disabled scorer) instead of crashing on the missing model.
+            silero_optional=("--smoke" in sys.argv),
         )
         # The initial translator comes from config.yaml whose api_key may be
         # empty (the user's real model config arrives via the deferred init,

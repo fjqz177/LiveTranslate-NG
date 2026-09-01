@@ -83,13 +83,22 @@ class SileroConfidenceScorer:
         threshold: float = 0.50,
         sample_rate: int = 16000,
         model_path: Path | str | None = None,
+        allow_missing: bool = False,
     ):
         import onnxruntime as ort
 
         self.threshold = threshold
         self.sample_rate = sample_rate
         path = str(model_path) if model_path else str(default_onnx_path())
+        # allow_missing: the CI smoke gate boots the app headless where the
+        # model cache is empty (silero-vad is not in the torch-free dev env).
+        # A disabled scorer (no session) keeps VAD silent instead of crashing
+        # startup; the user's real install downloads the model on first use.
         if not Path(path).exists():
+            if allow_missing:
+                log.warning("Silero VAD model absent, running disabled (smoke)")
+                self._session = None
+                return
             raise FileNotFoundError(
                 f"Silero VAD model not found at {path}. Install the "
                 "silero-vad package or download the ONNX model into the "
@@ -123,6 +132,9 @@ class SileroConfidenceScorer:
         self._context = np.zeros((1, self._context_size), dtype=np.float32)
 
     def score(self, audio_chunk: np.ndarray) -> float:
+        session = self._session
+        if session is None:  # allow_missing scorer stays silent
+            return 0.0
         window = self._window_size
         chunk = audio_chunk[:window]
         if len(chunk) < window:
@@ -131,7 +143,7 @@ class SileroConfidenceScorer:
             self.reset()
 
         x = np.concatenate([self._context, chunk.reshape(1, -1)], axis=1)
-        out, state = self._session.run(
+        out, state = session.run(
             None,
             {
                 "input": x.astype(np.float32),
