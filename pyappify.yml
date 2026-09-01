@@ -26,4 +26,5 @@ profiles:
 
   - name: "gpu"                          # 可切换的 GPU 变体（torch cu126 + cuda 库）
     requirements: "requirements-full-gpu.txt"
-    pip_args: "--extra-index-url https://download.pytorch.org/whl/cu126"
+    # 清华默认 + 南大 cu126：cu126 wheel 国内经南大可达（download.pytorch.org 国内慢）。
+    pip_args: "--index-url https://pypi.tuna.tsinghua.edu.cn/simple --extra-index-url https://mirror.nju.edu.cn/pytorch/whl/cu126"
