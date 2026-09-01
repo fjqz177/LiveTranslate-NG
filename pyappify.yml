@@ -1,0 +1,29 @@
+# pyappify 分发配置（LiveTranslate-NG）。
+#
+# 三件独立的事，正好是 pyappify 原生模型：
+#   ① 软件源码  —— git-tag 秒级更新（pyappify 只换 working/，依赖不动）
+#   ② 依赖环境  —— 首次一次性 pip 装满（本 yml 的每个 profile 一套 requirements）
+#   ③ 变体切换  —— cpu/gpu 两个 profile，pyappify 切 profile = 重装 torch 变体
+#
+# 约束：第一个 profile 必须命名为 "default"（pyappify 更新时硬编码读它）。
+#   代码更新时 requirements 不变化 => 不触发重 pip => 绕开 pyappify 的 default-profile bug。
+# 引擎的 cpu/gpu 是"硬件变体"，不是"引擎选择"——装满后所有引擎（SenseVoice-ONNX /
+#   Whisper / FunASR / Anime-Whisper）都可用，App 永不管理引擎；模型仍由 App 单独下载。
+
+name: "LiveTranslate"
+icon: "assets/icons/app.ico"
+website: "https://github.com/fjqz177/LiveTranslate-NG"
+
+profiles:
+  - name: "default"                      # ★ 必须命名 default（= CPU 默认、保守）
+    git_url: "https://github.com/fjqz177/LiveTranslate-NG"     # 需 vX.Y.Z semver tag
+    main_script: "main.py"
+    requires_python: "3.12"
+    requirements: "requirements-full-cpu.txt"                  # base + funasr + whisper（torch cpu）
+    pip_args: "--index-url https://pypi.tuna.tsinghua.edu.cn/simple"   # 国内镜像，可按需换
+    use_pythonw: true
+    show_add_defender: true
+
+  - name: "gpu"                          # 可切换的 GPU 变体（torch cu126 + cuda 库）
+    requirements: "requirements-full-gpu.txt"
+    pip_args: "--extra-index-url https://download.pytorch.org/whl/cu126"
