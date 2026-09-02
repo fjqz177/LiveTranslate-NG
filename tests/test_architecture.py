@@ -53,18 +53,32 @@ def _resolve_relative(path: Path, level: int, module: str | None) -> str:
 
 
 def _imports_of(path: Path):
-    """Yield every imported module name as a dotted absolute name
-    (import x.y / from x.y import ... / relative imports resolved)."""
+    """Yield every imported module name as a dotted absolute name (import x.y /
+    from x.y import ... / relative imports resolved), PLUS the submodule name each
+    ``from ... import name`` binds.
+
+    The extra submodule names close an ARCH-3 blind spot: without them
+    ``from livetranslate.modeling import registry`` yields only the bare
+    ``livetranslate.modeling``, so the core->modeling carve-out and the
+    GUI-imports-engines guard become dependent on which import style the source
+    happens to use — a one-word refactor flips or bypasses them."""
     tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 yield alias.name
         elif isinstance(node, ast.ImportFrom):
-            if node.level:
-                yield _resolve_relative(path, node.level, node.module)
-            elif node.module:
-                yield node.module
+            base = (
+                _resolve_relative(path, node.level, node.module)
+                if node.level
+                else (node.module or "")
+            )
+            if not base:
+                continue
+            yield base
+            for alias in node.names:
+                if alias.name != "*":
+                    yield f"{base}.{alias.name}"
 
 
 def _relative(path: Path) -> str:
@@ -161,19 +175,41 @@ def test_layers_do_not_reach_up():
     # Dotted import prefixes (ARCH-1): _has_import compares dotted names,
     # slash-separated values silently never matched and made this rule dead.
     rules = {
-        "livetranslate/core": ("livetranslate.ui", "livetranslate.audio", "livetranslate.asr"),
+        # core/ may NOT reach modeling wholesale: modeling.manager imports torch,
+        # and core is promised torch-free. The one carve-out is modeling.registry
+        # (pure, zero-import) which core/settings.py legitimately uses.
+        "livetranslate/core": (
+            "livetranslate.ui",
+            "livetranslate.audio",
+            "livetranslate.asr",
+            "livetranslate.modeling",
+        ),
         "livetranslate/modeling": ("livetranslate.ui", "livetranslate.audio", "livetranslate.asr"),
         "livetranslate/audio": ("livetranslate.ui", "livetranslate.asr", "livetranslate.modeling"),
         "livetranslate/asr": ("livetranslate.ui",),
     }
-    offenders = [
-        f"{_relative(p)} -> {prefix}"
-        for layer, forbidden in rules.items()
-        for p in _python_files(PACKAGE)
-        if _relative(p).startswith(layer)
-        for prefix in forbidden
-        if _has_import(p, prefix)
-    ]
+    core_modeling_allow = "livetranslate.modeling.registry"
+    offenders = []
+    for layer, forbidden in rules.items():
+        for p in _python_files(PACKAGE):
+            if not _relative(p).startswith(layer):
+                continue
+            for prefix in forbidden:
+                if not _has_import(p, prefix):
+                    continue
+                # core->modeling carve-out: core may import modeling ONLY via
+                # the torch-free modeling.registry submodule.
+                if (
+                    layer == "livetranslate/core"
+                    and prefix == "livetranslate.modeling"
+                    and all(
+                        name == core_modeling_allow or name.startswith(core_modeling_allow + ".")
+                        for name in _imports_of(p)
+                        if name.startswith("livetranslate.modeling")
+                    )
+                ):
+                    continue
+                offenders.append(f"{_relative(p)} -> {prefix}")
     assert not offenders, f"upward cross-layer imports: {offenders}"
 
 
@@ -225,13 +261,20 @@ def test_engines_stay_behind_the_contract():
 
 
 def test_gui_process_never_imports_engine_backends():
-    """Only the ASR worker may import asr/engines (GUI must not load models)."""
-    offenders = []
-    for p in _python_files(PACKAGE):
-        rel = _relative(p)
-        if rel.startswith("livetranslate/asr/") or not _has_import(p, "livetranslate.asr.engines"):
-            continue
-        offenders.append(rel)
+    """Only the ASR worker (and engine files importing their own siblings) may
+    import asr/engines — the GUI must never load a model backend. The old
+    blanket 'anything under asr/' exemption let GUI-process modules like
+    asr/client.py, asr/controller.py or asr/remote.py import engines unnoticed;
+    the rule is now scoped to the two real importer paths."""
+    # Legitimate importers: the worker process, and engine files importing
+    # sibling engines (e.g. funasr.py: `from ...engines.sensevoice import ...`).
+    exempt_prefixes = ("livetranslate/asr/worker.py", "livetranslate/asr/engines/")
+    offenders = [
+        _relative(p)
+        for p in _python_files(PACKAGE)
+        if not _relative(p).startswith(exempt_prefixes)
+        and _has_import(p, "livetranslate.asr.engines")
+    ]
     assert not offenders, f"only the ASR worker may import engine backends: {offenders}"
 
 
@@ -267,19 +310,61 @@ def test_composition_root_is_not_imported_by_the_package():
 _DYNAMIC_IMPORT_EXEMPT = {"livetranslate/asr/worker.py"}
 
 
+def _dynamic_import_forms(text: str) -> list[str]:
+    """Forbidden dynamic-import spellings found in one source text. Catches the
+    dotted form (`importlib.import_module`), the bare-name form from a
+    `from importlib import import_module` binding, AND the `__import__` builtin
+    — the old scanner only saw the dotted Attribute form and let the other two
+    bypass every import rule (ARCH-3 blind spot)."""
+    hits: set[str] = set()
+    for node in ast.walk(ast.parse(text)):
+        if isinstance(node, ast.Attribute) and node.attr == "import_module":
+            hits.add("importlib.import_module")
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in ("import_module", "__import__")
+        ):
+            hits.add(node.func.id)
+    return sorted(hits)
+
+
 def test_no_dynamic_import_module():
-    """importlib.import_module bypasses every rule in this file. The package
-    has no legitimate use for it (availability probes use find_spec); any
-    new occurrence needs a deliberate guard extension, not a silent pass."""
+    """importlib.import_module / __import__ bypass every rule in this file. The
+    package has no legitimate use for them (availability probes use find_spec);
+    any new occurrence needs a deliberate guard extension, not a silent pass."""
     offenders = [
-        str(p.relative_to(PROJECT_ROOT))
+        f"{p.relative_to(PROJECT_ROOT)}: {','.join(_dynamic_import_forms(p.read_text(encoding='utf-8')))}"
         for directory in (PACKAGE, SERVER)
         for p in _python_files(directory)
         if _relative(p) not in _DYNAMIC_IMPORT_EXEMPT
-        for node in ast.walk(ast.parse(p.read_text(encoding="utf-8")))
-        if isinstance(node, ast.Attribute) and node.attr == "import_module"
+        and _dynamic_import_forms(p.read_text(encoding="utf-8"))
     ]
-    assert not offenders, f"importlib.import_module is forbidden (AST blind spot): {offenders}"
+    assert not offenders, f"dynamic import is forbidden (AST blind spot): {offenders}"
+
+
+def test_dynamic_import_guard_catches_all_forms():
+    """Meta-guard: the scanner must detect every importlib.import_module
+    spelling plus __import__, not just the dotted form (ARCH-3). Without this
+    the guard silently narrows back to `x.import_module` and the blind spot
+    reopens."""
+    assert _dynamic_import_forms("import importlib\nimportlib.import_module('x')") == [
+        "importlib.import_module"
+    ]
+    assert _dynamic_import_forms("from importlib import import_module\nimport_module('x')") == [
+        "import_module"
+    ]
+    assert _dynamic_import_forms("__import__('x')") == ["__import__"]
+    # A benign module must not trip the scanner.
+    assert _dynamic_import_forms("def f(x): return x\nimport os") == []
+
+
+def test_server_never_imports_qt():
+    """livetranslate_server is a headless FastAPI/uvicorn ASR server (standalone
+    wheel, no UI). PyQt6 leaking in would be a real layering error the previous
+    PyQt6 guard could not see — it only scanned livetranslate/."""
+    offenders = [_relative(p) for p in _python_files(SERVER) if _has_import(p, "PyQt6")]
+    assert not offenders, f"server must never import PyQt6: {offenders}"
 
 
 def test_server_package_is_isolated():
@@ -311,3 +396,20 @@ def test_relative_import_resolution_is_sound():
     assert _resolve_relative(PACKAGE / "asr" / "__init__.py", 1, "worker") == (
         "livetranslate.asr.worker"
     )
+
+
+def test_imports_of_resolves_importfrom_submodule_names(tmp_path):
+    """Meta-guard (ARCH-3): `_imports_of` must resolve `from pkg import sub` to the
+    submodule name, not just the bare package. Without this the core->modeling
+    carve-out and the GUI-imports-engines guard become import-spelling dependent
+    — `from livetranslate.modeling import registry` would be mis-failed as an
+    upward import and `from livetranslate.asr import engines` would evade the
+    GUI guard (a one-word refactor flips or bypasses them)."""
+    src = tmp_path / "m.py"
+    src.write_text(
+        "from livetranslate.modeling import registry\nfrom livetranslate.asr import engines\n",
+        encoding="utf-8",
+    )
+    names = set(_imports_of(src))
+    assert "livetranslate.modeling.registry" in names, "carve-out must see the dotted submodule"
+    assert "livetranslate.asr.engines" in names, "GUI guard must see the engines submodule"

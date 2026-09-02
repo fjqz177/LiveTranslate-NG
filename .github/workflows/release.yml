@@ -42,6 +42,10 @@ jobs:
   validate:
     name: 1 · Validate
     runs-on: windows-latest
+    # A hung smoke/boot must fail fast instead of stalling the release at the
+    # runner's default 6h limit (CLAUDE.md §3 records the --multiprocessing-fork
+    # deadlock failure mode as a real hang).
+    timeout-minutes: 30
     env:
       # Clear secrets before the quality gate so tests can't rely on them
       # (plan §4.8: "清空 secrets 环境变量再跑").
@@ -95,6 +99,10 @@ jobs:
     name: 2 · Build & sign
     needs: validate
     runs-on: windows-latest
+    # Build job is heavier than validate (Rust launcher compile + online-setup
+    # staging via pyappify-action), so it gets a bit more headroom than the
+    # validate job's smoke-hang cap.
+    timeout-minutes: 60
     steps:
       - name: Configure runner
         shell: pwsh
@@ -149,7 +157,6 @@ jobs:
             fi
           done
           echo "Drift gate OK: requirements-full-{cpu,gpu}.txt match pyproject"
-          Write-Host "Drift gate OK: requirements-full-{cpu,gpu}.txt match pyproject"
 
       # Portable executable (staged only when signing, so it can be signed
       # BEFORE it is baked into the installer).

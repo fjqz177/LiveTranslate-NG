@@ -215,6 +215,18 @@ def test_claude_md_section8_module_map_exists():
     missing_dirs = [r for r in sorted(dir_refs) if not (SRC / r).is_dir()]
     assert not missing_files, f"CLAUDE.md §8 lists non-existent modules: {missing_files}"
     assert not missing_dirs, f"CLAUDE.md §8 lists non-existent packages: {missing_dirs}"
+    # Reverse direction (disk -> doc): the §8 check is one-directional (doc ->
+    # disk), so a brand-new src/ module silently escapes the module map without
+    # ever being documented. Assert every real module is covered, allowing only
+    # the empty package __init__ files.
+    undocumented = sorted(
+        p.relative_to(SRC).as_posix()
+        for p in _src_files()
+        if p.relative_to(SRC).as_posix() not in file_refs
+        and not any(p.relative_to(SRC).as_posix().startswith(d + "/") for d in dir_refs)
+    )
+    undocumented = [r for r in undocumented if r != "livetranslate/__init__.py"]
+    assert not undocumented, f"src modules missing from CLAUDE.md §8: {undocumented}"
 
 
 def test_no_cu128_token_in_source():

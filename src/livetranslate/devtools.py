@@ -29,7 +29,22 @@ _GATE: list[list[str]] = [
     ["uv", "run", "ruff", "check", "."],
     ["uv", "run", "ruff", "format", "--check", "."],
     ["uv", "run", "mypy", "src"],
-    ["uv", "run", "pytest", "tests/"],
+    # Coverage is the 80% mandate's only enforcement point (was a paper
+    # promise). fail-under is a ratchet bar deliberately BELOW the current
+    # measured level (~59%) so it blocks a real regression without forcing an
+    # immediate jump on this change — raise it as coverage climbs. Term-missing
+    # shows the untested lines so the gap stays visible in the gate's own output.
+    # --timeout comes from addopts (pyproject.toml), so a hung test dies fast
+    # instead of stalling a CI job at the default multi-hour limit.
+    [
+        "uv",
+        "run",
+        "pytest",
+        "tests/",
+        "--cov=livetranslate",
+        "--cov-report=term-missing",
+        "--cov-fail-under=55",
+    ],
 ]
 
 

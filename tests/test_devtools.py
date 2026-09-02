@@ -32,5 +32,9 @@ def test_check_main_is_gate_alias():
 
 def test_gate_order_fail_fast():
     # ruff (lint) precedes pytest; a code error surfaces before the slow suite.
+    # The pytest step now carries coverage flags, so locate it by substring
+    # rather than exact element equality.
     joined = [" ".join(s) for s in _GATE]
-    assert joined.index("uv run ruff check .") < joined.index("uv run pytest tests/")
+    ruff_idx = next(i for i, s in enumerate(joined) if "ruff check" in s)
+    pytest_idx = next(i for i, s in enumerate(joined) if "pytest" in s)
+    assert ruff_idx < pytest_idx

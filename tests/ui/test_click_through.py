@@ -6,10 +6,24 @@ the mouse could never get back in — the helpers must keep the window
 visible and stable across the polling the overlay/subtitle windows run.
 """
 
+import sys
+
+import pytest
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QWidget
 
 import livetranslate.platform.window as winutil
+
+# win32-only: window.py uses ctypes.windll.user32 GetWindowLongW/SetWindowLongW.
+# On non-win32 `ctypes.windll` doesn't exist and these tests would raise an
+# AttributeError (ERROR) instead of skipping — gate them so the suite is
+# portable. The `platform` marker makes the OS-specific intent explicit.
+pytestmark = pytest.mark.platform
+
+if sys.platform != "win32":
+    pytest.skip(
+        "win32-only window click-through tests (use ctypes.windll)", allow_module_level=True
+    )
 
 
 def _tool_window() -> QWidget:
