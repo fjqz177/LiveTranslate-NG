@@ -27,12 +27,16 @@ env:
   # are configured (plan §7.8: first SignPath run needs a manual project +
   # approval). Default 'false' so a tag push builds an unsigned setup.exe first.
   SIGN_BUILD: "false"
-  # Official indexes for the export-only drift gate. GitHub-hosted runners are
-  # outside mainland China, so the export here resolves against PyPI official /
-  # PyTorch official; the committed requirements (generated locally against the
-  # Tsinghua/NJU mirrors) pin the SAME wheels, so the diff must stay empty.
+  # Official PyPI for the export-only drift gate. GitHub-hosted runners sit
+  # outside mainland China, so non-torch packages resolve against PyPI official;
+  # the committed requirements (generated locally against the Tsinghua mirror)
+  # pin the SAME wheels — a diff means the committed file drifted from pyproject
+  # (plan §4.7; the gate is soft, so it only warns, never blocks packaging).
+  # The GPU variant's torch is deliberately NOT overridden via `--index
+  # "pytorch=<url>"` — that promotes the cu126 index to a global candidate and
+  # re-breaks idna/jinja2. Instead it resolves from the pyproject explicit NJU
+  # cu126 index, whose hashes equal the official cu126 wheels the installer fetches.
   LT_REQUIREMENTS_PYPI_INDEX: "https://pypi.org/simple"
-  LT_REQUIREMENTS_PYTORCH_INDEX: "https://download.pytorch.org/whl/cu126"
 
 jobs:
   validate:
@@ -107,13 +111,12 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
-      # Drift gate: regenerate the pinned install requirements with the official
-      # indexes and diff the committed ones. Mirrors are mirrors of the same
-      # wheels so the pins must match byte-for-byte; a diff means the committed
-      # requirements drifted from pyproject (plan §4.7). `--index-strategy
-      # unsafe-best-match` is required because the cu126 PyTorch mirror also
-      # carries old non-torch packages (e.g. idna==3.4) that would otherwise
-      # win by index order and break openai.
+      # Drift gate: regenerate the pinned install requirements and diff the
+      # committed ones. Mirrors are mirrors of the same wheels so the pins must
+      # match byte-for-byte; a diff means the committed requirements drifted from
+      # pyproject (plan §4.7). No `--index-strategy` is used: CPU exports torch
+      # from PyPI (`--index "pytorch=$PYPI"`), GPU leaves torch to the explicit
+      # NJU cu126 index — overriding it via `--index` would re-break idna/jinja2.
       - name: Drift gate (requirements-full-*.txt == pyproject extras)
         shell: bash
         # Soft gate: the local (mirror) and CI (official) exports resolve to the
@@ -132,8 +135,8 @@ jobs:
           # CPU profile: torch/torchaudio resolve from PyPI (the CPU build), same
           # as build_full_requirements.py — NOT the cu126 index (which yields a
           # different wheel/hash and false-positive drift).
-          uv export --no-dev --no-emit-project --default-index "$LT_REQUIREMENTS_PYPI_INDEX" --index "pytorch=$LT_REQUIREMENTS_PYPI_INDEX" --index-strategy unsafe-best-match --extra engine-funasr --extra engine-whisper > "$RUNNER_TEMP/cpu.txt"
-          uv export --no-dev --no-emit-project --default-index "$LT_REQUIREMENTS_PYPI_INDEX" --index "pytorch=$LT_REQUIREMENTS_PYTORCH_INDEX" --index-strategy unsafe-best-match --extra engine-funasr --extra engine-whisper --extra engine-cuda > "$RUNNER_TEMP/gpu.txt"
+          uv export --no-dev --no-emit-project --default-index "$LT_REQUIREMENTS_PYPI_INDEX" --index "pytorch=$LT_REQUIREMENTS_PYPI_INDEX" --extra engine-funasr --extra engine-whisper > "$RUNNER_TEMP/cpu.txt"
+          uv export --no-dev --no-emit-project --default-index "$LT_REQUIREMENTS_PYPI_INDEX" --extra engine-funasr --extra engine-whisper --extra engine-cuda > "$RUNNER_TEMP/gpu.txt"
           for pair in cpu:requirements-full-cpu.txt gpu:requirements-full-gpu.txt; do
             f="${pair%%:*}"; comm="${pair#*:}"
             grep -v '^#' "$RUNNER_TEMP/$f.txt" > "$RUNNER_TEMP/$f.filtered"

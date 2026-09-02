@@ -26,8 +26,10 @@ profiles:
 
   - name: "gpu"                          # 可切换的 GPU 变体（torch cu126 + cuda 库）
     requirements: "requirements-full-gpu.txt"
-    # 清华默认 + 官方 cu126。打包 CI 跑在境外 runner，必须用官方 cu126 才能可靠
-    # 下载 torch cu126（南大镜像在境外慢/不稳会令 build installers 校验失败）。
-    # 中国用户受装时官方 cu126 可达性见 §7.5；如需完全走南大可改回
-    # https://mirror.nju.edu.cn/pytorch/whl/cu126。
-    pip_args: "--index-url https://pypi.tuna.tsinghua.edu.cn/simple --extra-index-url https://download.pytorch.org/whl/cu126"
+    # 清华默认 + 南大 cu126：装机（中国用户）从南大下载 torch cu126 快（境内
+    # CDN）。南大与官方 cu126 的 wheel hash 一致，与 requirements-full-gpu.txt
+    # （由 pyproject explicit cu126 生成）永远匹配，export/装机两侧不漂移。
+    # 注意：CI 打包的 build installers 同样读这份 pip_args（境外 runner）——
+    # 若境外访问南大慢/不稳导致 build 失败，可临时改回官方 cu126，但装机也会
+    # 跟着改用官方（装机会慢）。
+    pip_args: "--index-url https://pypi.tuna.tsinghua.edu.cn/simple --extra-index-url https://mirror.nju.edu.cn/pytorch/whl/cu126"

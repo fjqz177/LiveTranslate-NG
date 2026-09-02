@@ -131,9 +131,19 @@ name = "pypi"
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
 
-# PyTorch publishes CUDA-variant wheels on its own index, not PyPI. Use the
-# NJU mirror (reachable from mainland networks) instead of download.pytorch.org
-# which is slow there.
+# PyTorch publishes CUDA-variant wheels on its own index, not PyPI. Use the NJU
+# mirror (reachable from mainland networks) instead of download.pytorch.org,
+# which is slow there. `explicit = true` scopes this index ONLY to the packages
+# that opt in via [tool.uv.sources] (torch/torchaudio); every other package
+# resolves from the `pypi` default index, so uv export emits a complete
+# --hash= set for them (a package missing its hash — e.g. jinja2 — makes
+# `pip install -r` fail under the implicit --require-hashes mode).
+# NOTE: never override this index with `--index "pytorch=<url>"` on export:
+# that promotes it to a global candidate and re-introduces the idna conflict
+# (the cu126 index also carries old non-torch packages). CPU/GPU torch sources
+# are chosen in scripts/build_full_requirements.py — CPU pins torch to the pypi
+# index, GPU keeps this explicit cu126 index, so each variant gets only its own
+# torch wheel while the hash set stays complete.
 [[tool.uv.index]]
 name = "pytorch"
 url = "https://mirror.nju.edu.cn/pytorch/whl/cu126"
