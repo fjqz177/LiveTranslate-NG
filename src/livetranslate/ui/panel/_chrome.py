@@ -692,8 +692,8 @@ def _spin_arrow_url(mode: str, up: bool) -> str:
     """Absolute file URL for a spinbox arrow asset.
 
     Assets live under assets/icons/spin_{up,down}_{theme}.png in the repo
-    checkout and in the frozen _MEIPASS bundle (packaging/livetranslate.spec
-    ships the whole icons dir). The URL must be absolute — QSS resolves
+    checkout and in the frozen bundle (the launcher ships the whole icons
+    dir). The URL must be absolute — QSS resolves
     relative urls against the current working directory, which is not stable
     in a frozen build. Falls back to an empty image (arrows simply hidden)
     if the asset is missing, which is strictly better than a broken square.

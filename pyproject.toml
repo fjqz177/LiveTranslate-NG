@@ -101,7 +101,6 @@ livetranslate = "livetranslate.__main__:main"
 # uv-only developer entry points (no justfile / no extra tools)
 livetranslate-pr = "livetranslate.devtools:gate_main"
 livetranslate-check = "livetranslate.devtools:check_main"
-livetranslate-package = "livetranslate.devtools:package_main"
 
 [dependency-groups]
 # silero-vad is intentionally NOT here: the >=5.0 wheel hard-depends

@@ -34,17 +34,11 @@ Desktop.ini
 # tracked vendored source).
 /tools/
 
-# Inno Setup portable toolchain + packaging downloads (scripts/package_windows.ps1)
-.tools/
-
 # Distribution
 dist/
 build/
 release/
 *.egg-info/
-packaging/.update_private.key
-packaging/latest.json
-packaging/latest.json.sig
 # DSH agent runtime state (local only)
 .omo/
 

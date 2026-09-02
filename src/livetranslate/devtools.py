@@ -4,7 +4,6 @@
     uv run livetranslate-pr --smoke        # gate + frozen-style --smoke
     uv run livetranslate-pr --git-audit    # gate + .gitignore self-check
     uv run livetranslate-check             # alias of livetranslate-pr (back-compat)
-    uv run livetranslate-package           # Windows packaging (args pass through)
 
 Everything else is plain uv:
 
@@ -15,7 +14,6 @@ Everything else is plain uv:
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -103,18 +101,6 @@ def gate_main() -> int:
 # Back-compat alias: the original name for the gate entry point (kept so a
 # CI/blob calling `livetranslate-check` still means exactly the same gate).
 check_main = gate_main
-
-
-def package_main() -> int:
-    if sys.platform != "win32":
-        print("Windows packaging runs on Windows only (scripts/package_windows.ps1).")
-        return 1
-    # Prefer PowerShell 7; Windows 10 ships Windows PowerShell 5.1 only.
-    shell = shutil.which("pwsh") or shutil.which("powershell")
-    if shell is None:
-        print("PowerShell not found — install PowerShell 7 or use Windows PowerShell.")
-        return 1
-    return _run([shell, "-File", "scripts/package_windows.ps1", *sys.argv[1:]])
 
 
 if __name__ == "__main__":
