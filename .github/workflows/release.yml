@@ -159,7 +159,7 @@ jobs:
         if: env.SIGN_BUILD == 'true'
         with:
           build_exe_only: true
-          version: v-0.0.25
+          version: v0.0.25
 
       - name: Upload portable executable for signing
         id: upload_executable
@@ -233,7 +233,7 @@ jobs:
         id: build_installers
         uses: fjqz177/pyappify-action@master
         with:
-          version: v-0.0.25
+          version: v0.0.25
           build_exe_only: false
           online_only: true
 
