@@ -172,12 +172,89 @@ uv run python scripts/build_full_requirements.py  # 重新生成 requirements-fu
 
 ---
 
-## 8. CI / 打包链路
+## 8. 分层模块图与 CI / 打包链路
+
+**模块/包分层地图**（docs drift 契约：`tests/test_docs_drift.py::test_claude_md_section8_module_map_exists` 解析 §8 的 `- **\`xxx/\`**:` bullets，并校验所列模块/包确实存在于 `src/`——改 `src/` 结构时此处必须同步）：
+
+- **`livetranslate_server/`**:
+  - `__main__.py`
+
+- **`__main__.py`**:
+- **`app.py`**:
+- **`asr/`**:
+  - `availability.py`
+  - `client.py`
+  - `controller.py`
+  - `engines/`
+  - `fbank.py`
+  - `protocol.py`
+  - `registry.py`
+  - `remote.py`
+  - `vendor/`
+  - `worker.py`
+- **`audio/`**:
+  - `backend.py`
+  - `backends/`
+  - `registry.py`
+  - `resample.py`
+  - `vad/`
+- **`core/`**:
+  - `benchmark.py`
+  - `diagnostics.py`
+  - `errors.py`
+  - `i18n.py`
+  - `paths.py`
+  - `pipeline.py`
+  - `privacy.py`
+  - `segment_text.py`
+  - `settings.py`
+  - `systeminfo.py`
+  - `theme.py`
+  - `transcript_writer.py`
+  - `translator.py`
+  - `version.py`
+- **`devtools.py`**:
+- **`modeling/`**:
+  - `cache.py`
+  - `hub_downloader.py`
+  - `manager.py`
+  - `registry.py`
+- **`platform/`**:
+  - `hotkey_backends/`
+  - `hotkeys.py`
+  - `permissions.py`
+  - `registry.py`
+  - `system.py`
+  - `system_backends/`
+  - `window.py`
+- **`ui/`**:
+  - `app_services/`
+  - `app_shell.py`
+  - `diagnostics.py`
+  - `dialogs.py`
+  - `hotkeys.py`
+  - `icons.py`
+  - `log_window.py`
+  - `memory_monitor.py`
+  - `overlay.py`
+  - `overlay_banner.py`
+  - `overlay_controls.py`
+  - `overlay_message.py`
+  - `overlay_monitor.py`
+  - `overlay_window.py`
+  - `panel/`
+  - `platform_notes.py`
+  - `settings_bridge.py`
+  - `single_instance.py`
+  - `subtitle_config.py`
+  - `subtitle_settings.py`
+  - `subtitle_text_widget.py`
+  - `subtitle_window.py`
 
 **`.github/workflows/release.yml`** 三层 + **`.github/workflows/ci.yml`**（单 check job）：
-- **validate**（windows）：`uv sync --locked` + `uv run livetranslate-pr` + smoke gate（`uv run livetranslate --smoke`，env `LIVETRANSLATE_PORTABLE_DIR`，`exit 0` 且输出 `Smoke OK`；先清空 secrets env）。
-- **package**（needs validate）：drift gate（重跑 export 并 diff 提交的 requirements-full-*.txt，`continue-on-error:true` 软门，grep 去 `^#` 行对比 pin+hash；CPU 传 `--index pytorch=$PYPI`、GPU 不传）+ `fjqz177/pyappify-action@master` 构建 + （`SIGN_BUILD=true` 时）SignPath。
-- **publish**（Ubuntu）：`softprops/action-gh-release`；`files` 只在 `*-online-setup.exe` + `*.zip` + `*_sha256.txt`。
+* **validate**（windows）：`uv sync --locked` + `uv run livetranslate-pr` + smoke gate（`uv run livetranslate --smoke`，env `LIVETRANSLATE_PORTABLE_DIR`，`exit 0` 且输出 `Smoke OK`；先清空 secrets env）。
+* **package**（needs validate）：drift gate（重跑 export 并 diff 提交的 requirements-full-*.txt，`continue-on-error:true` 软门，grep 去 `^#` 行对比 pin+hash；CPU 传 `--index pytorch=$PYPI`、GPU 不传）+ `fjqz177/pyappify-action@master` 构建 + （`SIGN_BUILD=true` 时）SignPath。
+* **publish**（Ubuntu）：`softprops/action-gh-release`；`files` 只在 `*-online-setup.exe` + `*.zip` + `*_sha256.txt`。
 
 **你 fork 的 action 用法（release.yml）**：
 ```yaml
@@ -187,9 +264,9 @@ with:
   build_exe_only: false
   online_only: true    # 只产 online-setup + zip + sha256，跳过所有 profile 离线包
 ```
-- **`online_only`** 是你在 `fjqz177/pyappify-action` 加的 input（上游 `ok-oldking/pyappify-action` 没有）：`index.js` 里 `if (!onlineOnly) { for(profile...){...} }` 跳过 `-c setup` 离线构建。
-- **action 内部 `git clone https://github.com/fjqz177/pyappify.git`**（你的 runtime fork，非官方）——你 fork 的 runtime 改动（torch 源选项卡等）由此进 installer。
-- `version` 用于 `git checkout tags/<version>`（pyappify runtime 的 tag）。
+* **`online_only`** 是你在 `fjqz177/pyappify-action` 加的 input（上游 `ok-oldking/pyappify-action` 没有）：`index.js` 里 `if (!onlineOnly) { for(profile...){...} }` 跳过 `-c setup` 离线构建。
+* **action 内部 `git clone https://github.com/fjqz177/pyappify.git`**（你的 runtime fork，非官方）——你 fork 的 runtime 改动（torch 源选项卡等）由此进 installer。
+* `version` 用于 `git checkout tags/<version>`（pyappify runtime 的 tag）。
 
 **`SIGN_BUILD`** 默认 `false`（先出未签名安装器）；SignPath 项目 + `SIGNPATH_*` secrets 就绪后才置 `true`（首次需人工项目/审批）。
 
