@@ -135,12 +135,12 @@ uv run python scripts/build_full_requirements.py  # 重新生成 requirements-fu
 
 **目标（记忆 `lt-ng-pyappify-full-model`，2026-09-02 定稿，推翻旧 pack 方案）**：pyappify 负责三件事——
 1. **源码**：git-tag 秒级更新（pyappify 只换 working/，依赖不动）。
-2. **依赖**：pyappify profile（default=cpu / gpu）各 pip 装满**全部引擎依赖**（`requirements-full-{cpu,gpu}.txt`），用户首开选变体即装齐。
+2. **依赖**：pyappify profile（cpu / gpu）各 pip 装满**全部引擎依赖**（`requirements-full-{cpu,gpu}.txt`），用户首开选变体即装齐。
 3. **变体**：cpu/gpu 两个 profile（换 profile = 重装 torch 变体）。
 **App 只下模型**（`modeling/hub_downloader.py`）；App 本体**无任何运行时动态装 pip 包的代码**（旧 updater 已删）。
 
 **`pyappify.yml` 关键**：
-- `profiles[0]` **必须命名 `default`**（pyappify 更新时硬编码读它）。default=cpu：`requirements=requirements-full-cpu.txt`、`main_script=main.py`、`requires_python=3.12`、`use_pythonw=true`、`show_add_defender=true`，**不写 pip_args**（主 pypi 镜像交给用户在 pyappify 设置里选）。
+- `profiles[0]`（**缺省兜底**）：命名即 launcher 上显示的变体名，**不再强制 `default`**——pyappify 更新/取当前 profile 用 `current_profile` 优先、`get_profile` 兜底回第一个 profile（`app_service.rs`）。cpu=`requirements-full-cpu.txt`、`main_script=main.py`、`requires_python=3.12`、`use_pythonw=true`、`show_add_defender=true`，**不写 pip_args**（主 pypi 镜像交给用户在 pyappify 设置里选）。
 - `profiles[1]` **`gpu`**：`requirements=requirements-full-gpu.txt`，`pip_args="--extra-index-url {PIP_TORCH_INDEX_URL}"`（**占位符**，由 pyappify runtime 展开成用户所选 torch 源）。
 
 **用户首开流程**：装 `*-online-setup.exe` → 打开 pyappify → **选硬件变体（CPU/GPU）** → **选主 pip 镜像**（内置 PyPI官方/清华/阿里/USTC/华为/腾讯）→ 对 GPU 还**选 torch cu126 源**（官方 download.pytorch.org / 南大 mirror.nju.edu.cn）→ 一次性装满该变体全部依赖。之后源码 git-tag 更新秒级（requirements 不变 → 不重 pip）；「Change Profile」切换变体（重装 torch）。

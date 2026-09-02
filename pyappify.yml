@@ -5,17 +5,24 @@
 #   ② 依赖环境  —— 首次一次性 pip 装满（本 yml 的每个 profile 一套 requirements）
 #   ③ 变体切换  —— cpu/gpu 两个 profile，pyappify 切 profile = 重装 torch 变体
 #
-# 约束：第一个 profile 必须命名为 "default"（pyappify 更新时硬编码读它）。
-#   代码更新时 requirements 不变化 => 不触发重 pip => 绕开 pyappify 的 default-profile bug。
+# 第一个 profile 是「缺省兜底」：pyappify 更新/取当前 profile 时，名字找不到就回退到第一个
+#   profile。命名可自定义（这里用 "cpu"/"gpu"，就是用户在 launcher 上看到的变体名），
+#   不强制叫 "default"——官方 runtime 更新时用 current_profile 优先、仅兜底回第一个 profile
+#   （app_service.rs 的 get_profile 已 fold 到 profiles.first()）。代码更新时 requirements
+#   不变化 => 不触发重 pip => 绕开 pyappify 的 default-profile 更新 bug。
 # 引擎的 cpu/gpu 是"硬件变体"，不是"引擎选择"——装满后所有引擎（SenseVoice-ONNX /
 #   Whisper / FunASR / Anime-Whisper）都可用，App 永不管理引擎；模型仍由 App 单独下载。
+#
+# 图标：launcher 卡片图标用 png（webview 渲染 ico 不可靠），见 icon 字段；exe/安装器图标由
+#   仓库根目录 icons/icon.ico + icons/icon.png 提供给 pyappify-action（其会整个拷到 runtime
+#   src-tauri/icons/）。本文件 icon 与根 icons/ 是两套，勿混。
 
 name: "LiveTranslate"
-icon: "assets/icons/app.ico"
+icon: "assets/icons/app.png"             # launcher 卡片图标（png；app 的 git 工作目录内路径）
 website: "https://github.com/fjqz177/LiveTranslate-NG"
 
 profiles:
-  - name: "default"                      # ★ 必须命名 default（= CPU 默认、保守）
+  - name: "cpu"                          # CPU 变体（= 标准版，launcher 上显示 "cpu"）
     git_url: "https://github.com/fjqz177/LiveTranslate-NG"     # 需 vX.Y.Z semver tag
     main_script: "main.py"
     requires_python: "3.12"
