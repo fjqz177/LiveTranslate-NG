@@ -20,16 +20,16 @@ profiles:
     main_script: "main.py"
     requires_python: "3.12"
     requirements: "requirements-full-cpu.txt"                  # base + funasr + whisper（torch cpu）
-    pip_args: "--index-url https://pypi.tuna.tsinghua.edu.cn/simple"   # 国内镜像，可按需换
+    # 不写 pip_args：主 pypi 镜像（含 CPU torch）交给用户在 pyappify 设置里选
+    # （内置 PyPI官方/清华/阿里/USTC/华为/腾讯）。写死 --index-url 会绕过该选择
+    # （python_env.rs 只在 pip_args 不含 --index-url/-i 时才用用户所选镜像）。
     use_pythonw: true
     show_add_defender: true
 
   - name: "gpu"                          # 可切换的 GPU 变体（torch cu126 + cuda 库）
     requirements: "requirements-full-gpu.txt"
-    # 清华默认 + 南大 cu126：装机（中国用户）从南大下载 torch cu126 快（境内
-    # CDN）。南大与官方 cu126 的 wheel hash 一致，与 requirements-full-gpu.txt
-    # （由 pyproject explicit cu126 生成）永远匹配，export/装机两侧不漂移。
-    # 注意：CI 打包的 build installers 同样读这份 pip_args（境外 runner）——
-    # 若境外访问南大慢/不稳导致 build 失败，可临时改回官方 cu126，但装机也会
-    # 跟着改用官方（装机会慢）。
-    pip_args: "--index-url https://pypi.tuna.tsinghua.edu.cn/simple --extra-index-url https://mirror.nju.edu.cn/pytorch/whl/cu126"
+    # 不写 --index-url/-i：主 pypi 镜像交给用户在 pyappify 设置里选。torch/cuda 的
+    # cu126 不在那些 pypi 镜像里，故用 --extra-index-url 官方 cu126 补充（官方与南大
+    # wheel hash 一致，requirements-full-gpu.txt 由 pyproject explicit cu126 生成，
+    # 装机校验通过）。CI 境外 build 走官方（快）；后续可把该 extra 换成南大（境内快）。
+    pip_args: "--extra-index-url https://download.pytorch.org/whl/cu126"

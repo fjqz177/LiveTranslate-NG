@@ -65,6 +65,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.7"
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
@@ -108,6 +109,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.7"
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
@@ -279,7 +281,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-assets
-          path: pyappify_dist/*
+          # 只发布在线安装包 + 源码包 + 校验和，不发布 build 时产出的离线
+          # -setup.exe（含依赖的大包）。依赖留给用户首开时按所选变体/镜像下载。
+          path: |
+            pyappify_dist/*-online-setup.exe
+            pyappify_dist/*.zip
+            pyappify_dist/*_sha256.txt
           if-no-files-found: error
           retention-days: 7
 
@@ -302,12 +309,17 @@ jobs:
           body: |
             ### LiveTranslate ${{ github.ref_name }}
 
-            Windows 安装包（双变体）：
-            * `LiveTranslate-win32-default-setup.exe` — CPU 版（默认，装满全部引擎依赖）
-            * `LiveTranslate-win32-gpu-setup.exe` — GPU 版（NVIDIA CUDA，torch cu126）
+            **在线安装包**（源码与依赖分离，轻量、不含依赖/Python）：
+            * `LiveTranslate-win32-online-setup.exe` — 安装器
 
-            装好后用内置"更新"即可秒级拉到新版本源码（依赖不变）。
-            > 首次安装会在线拉取全部依赖（CPU ~1.5GB / GPU ~4.5GB），请耐心等待镜像下载。
+            安装后**首次打开**，在 pyappify 里选择你的硬件变体（**CPU / GPU**）和
+            **镜像源**（内置 清华/阿里/USTC/华为/腾讯/PyPI官方），它会从零下载并装
+            好全部引擎依赖与模型。之后的新版本源码通过内置"更新"秒级拉取（依赖不变）。
+
+            > 首次下载依赖：CPU ~1.5GB / GPU ~4.5GB，请耐心等待镜像速度。
           draft: false
           prerelease: false
-          files: pyappify_dist/*
+          files: |
+            pyappify_dist/*-online-setup.exe
+            pyappify_dist/*.zip
+            pyappify_dist/*_sha256.txt
