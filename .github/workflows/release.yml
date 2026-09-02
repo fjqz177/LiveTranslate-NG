@@ -224,9 +224,22 @@ jobs:
       # Build both installers (default + gpu). When signing, the exe was signed
       # above so it is baked signed into both; when not signing this is the only
       # build step.
+      #
+      # 官方 ok-oldking/pyappify-action 没有 online-only 开关:build_exe_only:false
+      # 会无条件(a)产 online-setup,(b)再遍历所有 profile 跑 `-c setup` 下载依赖
+      # 构建离线 -setup.exe。其中 gpu 离线包把 torch+torchaudio(≈4.5GB) 压进 NSIS,
+      # 触发 makensis "error mmapping file ... is out of range" 内存映射超限而崩溃
+      # (CPU 离线包/online-setup/zip/sha256 都在崩之前已正常产出)。我们只发布
+      # online-setup(见下方 Stage release assets 仅 glob *-online-setup.exe),离线
+      # 包的构建与崩溃**不影响任何发布产物**,故加 continue-on-error 让 gpu 离线包崩
+      # 而不阻塞整个打包 job。
+      # 代价:每次构建仍会白白下载 gpu 依赖(4.5GB)直到 NSIS 崩,约多耗 5-8 分钟/次,
+      # 且日志会一直报这条 NSIS 错(但不失败)。若想彻底"不构建离线包",只能 fork
+      # action 加开关跳过下方的 profiles 循环——当前按用户决策用 continue-on-error。
       - name: Build installers
         id: build_installers
         uses: ok-oldking/pyappify-action@master
+        continue-on-error: true
         with:
           build_exe_only: false
 
