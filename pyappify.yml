@@ -29,7 +29,8 @@ profiles:
   - name: "gpu"                          # 可切换的 GPU 变体（torch cu126 + cuda 库）
     requirements: "requirements-full-gpu.txt"
     # 不写 --index-url/-i：主 pypi 镜像交给用户在 pyappify 设置里选。torch/cuda 的
-    # cu126 不在那些 pypi 镜像里，故用 --extra-index-url 官方 cu126 补充（官方与南大
-    # wheel hash 一致，requirements-full-gpu.txt 由 pyproject explicit cu126 生成，
-    # 装机校验通过）。CI 境外 build 走官方（快）；后续可把该 extra 换成南大（境内快）。
-    pip_args: "--extra-index-url https://download.pytorch.org/whl/cu126"
+    # cu126 不在那些 pypi 镜像里，故用 --extra-index-url 补；其 URL 用占位符
+    # {PIP_TORCH_INDEX_URL}，由 pyappify runtime 展开成用户所选 torch 源（官方/
+    # 南大，compat_manager 的 "Pip Torch Index URL"），官方与南大 wheel hash 一致
+    # （requirements-full-gpu.txt 由 pyproject explicit cu126 生成，装机校验通过）。
+    pip_args: "--extra-index-url {PIP_TORCH_INDEX_URL}"
