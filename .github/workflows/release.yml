@@ -155,10 +155,11 @@ jobs:
       # BEFORE it is baked into the installer).
       - name: Build portable executable
         id: build_executable
-        uses: ok-oldking/pyappify-action@master
+        uses: fjqz177/pyappify-action@master
         if: env.SIGN_BUILD == 'true'
         with:
           build_exe_only: true
+          version: v-0.0.25
 
       - name: Upload portable executable for signing
         id: upload_executable
@@ -221,27 +222,20 @@ jobs:
           Invoke-WebRequest -Uri "$baseUrl/SignedArtifact" -Headers $headers -OutFile $archivePath
           Expand-Archive -LiteralPath $archivePath -DestinationPath $out -Force
 
-      # Build both installers (default + gpu). When signing, the exe was signed
-      # above so it is baked signed into both; when not signing this is the only
-      # build step.
-      #
-      # 官方 ok-oldking/pyappify-action 没有 online-only 开关:build_exe_only:false
-      # 会无条件(a)产 online-setup,(b)再遍历所有 profile 跑 `-c setup` 下载依赖
-      # 构建离线 -setup.exe。其中 gpu 离线包把 torch+torchaudio(≈4.5GB) 压进 NSIS,
-      # 触发 makensis "error mmapping file ... is out of range" 内存映射超限而崩溃
-      # (CPU 离线包/online-setup/zip/sha256 都在崩之前已正常产出)。我们只发布
-      # online-setup(见下方 Stage release assets 仅 glob *-online-setup.exe),离线
-      # 包的构建与崩溃**不影响任何发布产物**,故加 continue-on-error 让 gpu 离线包崩
-      # 而不阻塞整个打包 job。
-      # 代价:每次构建仍会白白下载 gpu 依赖(4.5GB)直到 NSIS 崩,约多耗 5-8 分钟/次,
-      # 且日志会一直报这条 NSIS 错(但不失败)。若想彻底"不构建离线包",只能 fork
-      # action 加开关跳过下方的 profiles 循环——当前按用户决策用 continue-on-error。
+      # 用 fork (fjqz177/pyappify-action) 的 online_only:
+      # true → 只构建 web-install (online-setup) 安装器 + zip/sha256 源码包,
+      # **跳过**所有 profile 的 `-c setup` 离线 -setup.exe 构建。这必须做,因为 gpu
+      # 离线包把 ~4.5GB torch+torchaudio 压进 NSIS,触发 makensis "error mmapping
+      # file ... is out of range" 崩溃(CPU 离线/online/zip/sha256 都在崩前已产出)。
+      # 我们只发布 online-setup(见下方 Stage release assets 仅 glob),离线包每次白白
+      # 多花 ~5-8 分钟 + 下载 gpu 依赖,online_only 直接去掉这段。
       - name: Build installers
         id: build_installers
-        uses: ok-oldking/pyappify-action@master
-        continue-on-error: true
+        uses: fjqz177/pyappify-action@master
         with:
+          version: v-0.0.25
           build_exe_only: false
+          online_only: true
 
       # ── Sign each setup.exe (only when SIGN_BUILD). Two profiles → two
       # installers, each signed separately. ──────────────────────────────
