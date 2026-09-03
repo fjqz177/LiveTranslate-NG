@@ -11,6 +11,14 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      # GitHub Releases requires a tag; on a manual run there is no pushed tag,
+      # so this input supplies the release/tag name (e.g. v0.1.19). Empty on a
+      # tag push, where github.ref_name is already the tag.
+      version:
+        description: "发布版本号（作为 GitHub Release/tag 名，例如 v0.1.19；留空则用当前 ref）"
+        required: false
+        type: string
 
 concurrency:
   group: windows-release-${{ github.ref }}
@@ -320,8 +328,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          tag_name: ${{ inputs.version != '' && inputs.version || github.ref_name }}
           body: |
-            ### LiveTranslate ${{ github.ref_name }}
+            ### LiveTranslate ${{ inputs.version != '' && inputs.version || github.ref_name }}
 
             **在线安装包**（源码与依赖分离，轻量、不含依赖/Python）：
             * `LiveTranslate-win32-online-setup.exe` — 安装器
