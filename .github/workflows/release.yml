@@ -192,7 +192,7 @@ jobs:
           wait-for-completion: false
 
       - name: Approve portable executable signing
-        uses: fjogeleit/http-request-action@v1
+        uses: fjogeleit/http-request-action@v2
         if: env.SIGN_BUILD == 'true'
         with:
           url: "https://app.signpath.io/API/v1/${{ secrets.SIGNPATH_ORGANIZATION_ID }}/SigningRequests/${{ steps.sign_executable.outputs.signing-request-id }}/Approve"
