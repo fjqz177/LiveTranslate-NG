@@ -295,7 +295,7 @@ with:
 | 仓库 | 角色 | 当前关键 |
 |---|---|---|
 | `fjqz177/LiveTranslate-NG` | 本仓库（被打包的 App） | `pyappify.yml` + `release.yml` + `requirements-full-*.txt`；`main` 分支 |
-| `fjqz177/pyappify` (D:\biancheng\pyappify) | **运行时 launcher** | tag `v0.0.27`（远程已有 tag 不可重打，只递增）；torch 源选项卡 + 托盘菜单/6h 周期检查/日志工具/更新流程修复（2026-09-03） |
+| `fjqz177/pyappify` (D:\biancheng\pyappify) | **运行时 launcher** | tag `v0.0.27`（远程已有 tag 不可重打，只递增）；torch 源选项卡 + 托盘菜单/6h 周期检查/日志工具/更新流程修复（2026-09-03）。**`feat/pure-uv` 分支 = 纯 uv 改造**（uv python install + uv pip + legacy 一次性迁移 + 启动指纹门控，方案见 `docs/pure-uv-migration.md`） |
 | `fjqz177/pyappify-action` (D:\biancheng\pyappify-action) | **CI 打包 action** | 源码 `index.js` + 产物 `dist/index.js` 都加 `online_only`；clone URL 指向用户 runtime fork；`@master` |
 
 > runtime fork 与本仓库是**两条链路**：本仓库 `release.yml` 中 `uses: fjqz177/pyappify-action` 只是"构建器"；它内部 clone `fjqz177/pyappify`（runtime）编译 launcher；装机后 launcher 里跑的正是那个 runtime（含 torch 选项卡）。改 runtime 功能 → 需在 `fjqz177/pyappify` 改、push、**更新 `version` tag**（见 §9-8）。

@@ -2,7 +2,8 @@
 #
 # 三件独立的事，正好是 pyappify 原生模型：
 #   ① 软件源码  —— git-tag 秒级更新（pyappify 只换 working/，依赖不动）
-#   ② 依赖环境  —— 首次一次性 pip 装满（本 yml 的每个 profile 一套 requirements）
+#   ② 依赖环境  —— 由 pyappify 幂等装齐（pure-uv 分支用 uv python install +
+#      uv pip install 消费本 yml 的 requirements-full-*.txt（uv export hash 锁定））
 #   ③ 变体切换  —— cpu/gpu 两个 profile，pyappify 切 profile = 重装 torch 变体
 #
 # 第一个 profile 是「缺省兜底」：pyappify 更新/取当前 profile 时，名字找不到就回退到第一个
