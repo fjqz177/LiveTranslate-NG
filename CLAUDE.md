@@ -260,9 +260,11 @@ uv run python scripts/build_full_requirements.py  # 重新生成 requirements-fu
 ```yaml
 uses: fjqz177/pyappify-action@master
 with:
-  version: v0.0.25     # pyappify runtime tag（硬编码，需手动 bump，容易漏）
+  version: v0.0.27     # pyappify runtime tag（硬编码，需手动 bump，容易漏）
   build_exe_only: false
   online_only: true    # 只产 online-setup + zip + sha256，跳过所有 profile 离线包
+```
+> `workflow_dispatch` 手动触发时另有 `inputs.version` 输入（如 `-f version=v0.1.19`）：非空时作为 Publish 的 `tag_name`/标题——`tag push v*` 路径留空回退 `github.ref_name`。
 ```
 * **`online_only`** 是你在 `fjqz177/pyappify-action` 加的 input（上游 `ok-oldking/pyappify-action` 没有）：`index.js` 里 `if (!onlineOnly) { for(profile...){...} }` 跳过 `-c setup` 离线构建。
 * **action 内部 `git clone https://github.com/fjqz177/pyappify.git`**（你的 runtime fork，非官方）——你 fork 的 runtime 改动（torch 源选项卡等）由此进 installer。
@@ -293,10 +295,12 @@ with:
 | 仓库 | 角色 | 当前关键 |
 |---|---|---|
 | `fjqz177/LiveTranslate-NG` | 本仓库（被打包的 App） | `pyappify.yml` + `release.yml` + `requirements-full-*.txt`；`main` 分支 |
-| `fjqz177/pyappify` (D:\biancheng\pyappify) | **运行时 launcher** | tag `v0.0.25`；加 torch 源选项卡（`config_manager.rs` "Pip Torch Index URL" + `python_env.rs` `{PIP_TORCH_INDEX_URL}` 占位符展开 + 前端 App/SettingsPage 仅 gpu 显示） + 修 default-profile 更新 bug |
+| `fjqz177/pyappify` (D:\biancheng\pyappify) | **运行时 launcher** | tag `v0.0.27`（远程已有 tag 不可重打，只递增）；torch 源选项卡 + 托盘菜单/6h 周期检查/日志工具/更新流程修复（2026-09-03） |
 | `fjqz177/pyappify-action` (D:\biancheng\pyappify-action) | **CI 打包 action** | 源码 `index.js` + 产物 `dist/index.js` 都加 `online_only`；clone URL 指向用户 runtime fork；`@master` |
 
 > runtime fork 与本仓库是**两条链路**：本仓库 `release.yml` 中 `uses: fjqz177/pyappify-action` 只是"构建器"；它内部 clone `fjqz177/pyappify`（runtime）编译 launcher；装机后 launcher 里跑的正是那个 runtime（含 torch 选项卡）。改 runtime 功能 → 需在 `fjqz177/pyappify` 改、push、**更新 `version` tag**（见 §9-8）。
+
+**联合开发定稿（2026-09-03）**：三个仓库（App 源码 / runtime / action+workflow 打包器）逻辑解耦，靠 3 个契约握手——A：`pyappify.yml` 结构；B：`{PIP_TORCH_INDEX_URL}` 占位符协议；C：`release.yml` 的 runtime tag（唯一真实漂移点）。**联合开发只在本仓库会话进行**（保证跨仓库因果链同图）；单仓库纯改动可在对应仓库。runtime 侧的地图/检查单见 `D:\biancheng\pyappify\CLAUDE.md`（已建）。
 
 ---
 
