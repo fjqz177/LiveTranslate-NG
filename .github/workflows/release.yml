@@ -170,11 +170,12 @@ jobs:
       # BEFORE it is baked into the installer).
       - name: Build portable executable
         id: build_executable
-        uses: fjqz177/pyappify-action@master
+        uses: fjqz177/pyappify-action@feat/pure-uv
         if: env.SIGN_BUILD == 'true'
         with:
           build_exe_only: true
-          version: v0.0.27
+          version: v0.0.28
+          uv_version: "0.12.9"
 
       - name: Upload portable executable for signing
         id: upload_executable
@@ -246,9 +247,10 @@ jobs:
       # 多花 ~5-8 分钟 + 下载 gpu 依赖,online_only 直接去掉这段。
       - name: Build installers
         id: build_installers
-        uses: fjqz177/pyappify-action@master
+        uses: fjqz177/pyappify-action@feat/pure-uv
         with:
-          version: v0.0.27
+          version: v0.0.28
+          uv_version: "0.12.9"
           build_exe_only: false
           online_only: true
 
